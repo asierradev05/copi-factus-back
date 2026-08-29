@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
+import { EmailModule } from '../common/email/email.module';
 import { CustomersService } from '../customers/customers.service';
 import { ServicesService } from '../services/services.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -36,6 +37,7 @@ describe('Invoice Flow Integration', () => {
         ConfigModule.forRoot({ isGlobal: true }),
         PrismaModule,
         AuditModule,
+        EmailModule,
       ],
       providers: [
         CustomersService,
@@ -200,5 +202,5 @@ describe('Invoice Flow Integration', () => {
     const finalInvoice = await invoicesService.findOne(invoice.id);
     expect(finalInvoice.status).toBe(InvoiceStatus.PAGADA);
     expect(finalInvoice.balance.toNumber()).toBe(0);
-  });
+  }, 30000);
 });

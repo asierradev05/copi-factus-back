@@ -17,6 +17,12 @@ import { AuditModule } from './audit/audit.module';
 import { SettingsModule } from './settings/settings.module';
 import { RecurringServicesModule } from './recurring-services/recurring-services.module';
 import { InvoiceUploadsModule } from './invoice-uploads/invoice-uploads.module';
+import { QuotesModule } from './quotes/quotes.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
+import { DeliveryOrdersModule } from './delivery-orders/delivery-orders.module';
+import { ResolutionsModule } from './resolutions/resolutions.module';
+import { ReceivedDocumentsModule } from './received-documents/received-documents.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { SupabaseModule } from './common/supabase/supabase.module';
 
 @Module({
@@ -43,6 +49,12 @@ import { SupabaseModule } from './common/supabase/supabase.module';
     SettingsModule,
     RecurringServicesModule,
     InvoiceUploadsModule,
+    QuotesModule,
+    PurchaseOrdersModule,
+    DeliveryOrdersModule,
+    ResolutionsModule,
+    ReceivedDocumentsModule,
+    DashboardModule,
   ],
   providers: [
     {

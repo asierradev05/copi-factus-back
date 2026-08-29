@@ -27,7 +27,13 @@ async function main() {
   await prisma.payment.deleteMany();
   await prisma.serviceInvoiceLink.deleteMany();
   await prisma.invoiceItem.deleteMany();
+  await prisma.deliveryOrder.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
+  await prisma.quote.deleteMany();
+  await prisma.receivedDocument.deleteMany();
   await prisma.invoice.deleteMany();
+  await prisma.resolution.deleteMany();
+  await prisma.documentSequence.deleteMany();
   await prisma.service.deleteMany();
   await prisma.product.deleteMany();
   await prisma.serviceType.deleteMany();
@@ -346,6 +352,104 @@ async function main() {
     }),
   ]);
 
+  const resolution = await prisma.resolution.create({
+    data: {
+      prefix: 'SETP',
+      resolutionNumber: '18760000000001',
+      from: 1000,
+      to: 1999,
+      next: 1000,
+      dateFrom: new Date('2026-01-01'),
+      dateTo: new Date('2027-12-31'),
+      type: 'FACTURA' as const,
+      ambient: 'PRODUCCION' as const,
+      isActive: true,
+    },
+  });
+
+  const quote = await prisma.quote.create({
+    data: {
+      quoteNumber: 'COT-000001',
+      customerId: customer.id,
+      issueDate: new Date('2026-08-20'),
+      validUntil: new Date('2026-09-20'),
+      items: [
+        {
+          description: '1000 tarjetas de presentación full color',
+          quantity: 1000,
+          unitPrice: 120,
+          discount: 0,
+          taxRate: 19,
+        },
+      ],
+      subtotal: 120000,
+      discountTotal: 0,
+      taxTotal: 22800,
+      total: 142800,
+      status: 'APROBADA' as const,
+      notes: '[DEV] Cotización demo aprobada',
+      createdById: facturador.id,
+    },
+  });
+
+  const purchaseOrder = await prisma.purchaseOrder.create({
+    data: {
+      poNumber: 'OC-000001',
+      customerId: customer.id,
+      issueDate: new Date('2026-08-22'),
+      expectedDate: new Date('2026-09-05'),
+      items: [
+        {
+          description: 'Resma Papel A4',
+          quantity: 10,
+          unitPrice: 18500,
+          discount: 0,
+          taxRate: 19,
+        },
+      ],
+      subtotal: 185000,
+      discountTotal: 0,
+      taxTotal: 35150,
+      total: 220150,
+      status: 'SOLICITADA' as const,
+      notes: '[DEV] Orden de compra demo',
+      createdById: facturador.id,
+    },
+  });
+
+  const deliveryOrder = await prisma.deliveryOrder.create({
+    data: {
+      doNumber: 'ENT-000001',
+      customerId: customer.id,
+      scheduledAt: new Date('2026-08-30'),
+      items: [
+        {
+          description: 'Entrega de volantes impresos',
+          quantity: 500,
+          unitPrice: 350,
+        },
+      ],
+      status: 'PENDIENTE' as const,
+      notes: '[DEV] Entrega demo pendiente',
+      createdById: facturador.id,
+    },
+  });
+
+  await prisma.receivedDocument.create({
+    data: {
+      customerId: customer.id,
+      supplierName: 'Insumos Gráficos S.A.S.',
+      supplierNit: '900323456-8',
+      documentNumber: 'FVT-8899',
+      issueDate: new Date('2026-08-18'),
+      amount: 435000,
+      taxAmount: 82650,
+      concept: 'Compra de papel y tintas',
+      notes: '[DEV] Documento recibido demo',
+      createdById: facturador.id,
+    },
+  });
+
   console.log('✅ DEV seed completed:');
   console.log(`   Admin:      admin@copigrafica.dev / Admin123! (DEV_PASSWORD)`);
   console.log(`   Facturador: facturador@copigrafica.dev / Admin123!`);
@@ -354,6 +458,8 @@ async function main() {
   console.log(`   Invoices:   ${invoice1.invoiceNumber}, ${invoice2.invoiceNumber}, borrador ${invoice3.id}`);
   console.log(`   Service pending invoice: ${service2.description}`);
   console.log(`   Recurring:  Agua, Energía eléctrica, Internet fibra -> ${basicCategory.name}`);
+  console.log(`   Resolution: ${resolution.prefix} (${resolution.resolutionNumber}) activa`);
+  console.log(`   Quote/OC/Entrega/Recibido: ${quote.quoteNumber}, ${purchaseOrder.poNumber}, ${deliveryOrder.doNumber}, FVT-8899`);
   console.log(`   Profiles created: admin=${admin.id}, facturador=${facturador.id}, consulta=${consulta.id}`);
 }
 

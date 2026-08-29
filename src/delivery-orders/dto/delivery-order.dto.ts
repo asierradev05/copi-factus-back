@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -10,12 +11,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { DeliveryOrderStatus } from '@prisma/client';
 
-export class CreateInvoiceItemDto {
-  @IsOptional()
-  @IsUUID()
-  productId?: string;
-
+export class CreateDeliveryOrderItemDto {
   @IsString()
   @IsNotEmpty({ message: 'La descripción del ítem es obligatoria.' })
   description!: string;
@@ -25,31 +23,24 @@ export class CreateInvoiceItemDto {
   @Min(0.01)
   quantity!: number;
 
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  unitPrice!: number;
-
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  discount?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  taxRate?: number;
+  unitPrice?: number;
 }
 
-export class CreateInvoiceDto {
+export class CreateDeliveryOrderDto {
   @IsUUID()
   customerId!: string;
 
   @IsOptional()
+  @IsUUID()
+  invoiceId?: string;
+
+  @IsOptional()
   @IsDateString()
-  dueDate?: string;
+  scheduledAt?: string;
 
   @IsOptional()
   @IsString()
@@ -57,22 +48,25 @@ export class CreateInvoiceDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateInvoiceItemDto)
-  items!: CreateInvoiceItemDto[];
+  @Type(() => CreateDeliveryOrderItemDto)
+  items!: CreateDeliveryOrderItemDto[];
 }
 
-export class FilterInvoiceDto {
+export class UpdateDeliveryOrderStatusDto {
+  @IsEnum(DeliveryOrderStatus, {
+    message: 'Estado de orden de entrega no válido.',
+  })
+  status!: DeliveryOrderStatus;
+}
+
+export class FilterDeliveryOrderDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
 
   @IsOptional()
-  @IsString()
-  status?: string;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
+  @IsEnum(DeliveryOrderStatus)
+  status?: DeliveryOrderStatus;
 
   @IsOptional()
   @IsDateString()
@@ -93,10 +87,4 @@ export class FilterInvoiceDto {
   @IsNumber()
   @Min(1)
   limit?: number;
-}
-
-export class SendInvoiceEmailDto {
-  @IsOptional()
-  @IsString()
-  to?: string;
 }

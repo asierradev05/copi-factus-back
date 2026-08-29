@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -10,11 +11,12 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { QuoteStatus } from '@prisma/client';
 
-export class CreateInvoiceItemDto {
+export class CreateQuoteItemDto {
   @IsOptional()
-  @IsUUID()
-  productId?: string;
+  @IsString()
+  productCode?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'La descripción del ítem es obligatoria.' })
@@ -43,13 +45,17 @@ export class CreateInvoiceItemDto {
   taxRate?: number;
 }
 
-export class CreateInvoiceDto {
+export class CreateQuoteDto {
   @IsUUID()
   customerId!: string;
 
   @IsOptional()
   @IsDateString()
-  dueDate?: string;
+  issueDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
 
   @IsOptional()
   @IsString()
@@ -57,22 +63,23 @@ export class CreateInvoiceDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateInvoiceItemDto)
-  items!: CreateInvoiceItemDto[];
+  @Type(() => CreateQuoteItemDto)
+  items!: CreateQuoteItemDto[];
 }
 
-export class FilterInvoiceDto {
+export class UpdateQuoteStatusDto {
+  @IsEnum(QuoteStatus, { message: 'Estado de cotización no válido.' })
+  status!: QuoteStatus;
+}
+
+export class FilterQuoteDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
 
   @IsOptional()
-  @IsString()
-  status?: string;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
+  @IsEnum(QuoteStatus)
+  status?: QuoteStatus;
 
   @IsOptional()
   @IsDateString()
@@ -93,10 +100,4 @@ export class FilterInvoiceDto {
   @IsNumber()
   @Min(1)
   limit?: number;
-}
-
-export class SendInvoiceEmailDto {
-  @IsOptional()
-  @IsString()
-  to?: string;
 }

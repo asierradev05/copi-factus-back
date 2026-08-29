@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -10,12 +11,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { PurchaseOrderStatus } from '@prisma/client';
 
-export class CreateInvoiceItemDto {
-  @IsOptional()
-  @IsUUID()
-  productId?: string;
-
+export class CreatePurchaseOrderItemDto {
   @IsString()
   @IsNotEmpty({ message: 'La descripción del ítem es obligatoria.' })
   description!: string;
@@ -43,13 +41,21 @@ export class CreateInvoiceItemDto {
   taxRate?: number;
 }
 
-export class CreateInvoiceDto {
+export class CreatePurchaseOrderDto {
   @IsUUID()
   customerId!: string;
 
   @IsOptional()
   @IsDateString()
-  dueDate?: string;
+  issueDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expectedDate?: string;
+
+  @IsOptional()
+  @IsUUID()
+  invoiceId?: string;
 
   @IsOptional()
   @IsString()
@@ -57,22 +63,25 @@ export class CreateInvoiceDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateInvoiceItemDto)
-  items!: CreateInvoiceItemDto[];
+  @Type(() => CreatePurchaseOrderItemDto)
+  items!: CreatePurchaseOrderItemDto[];
 }
 
-export class FilterInvoiceDto {
+export class UpdatePurchaseOrderStatusDto {
+  @IsEnum(PurchaseOrderStatus, {
+    message: 'Estado de orden de compra no válido.',
+  })
+  status!: PurchaseOrderStatus;
+}
+
+export class FilterPurchaseOrderDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
 
   @IsOptional()
-  @IsString()
-  status?: string;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
+  @IsEnum(PurchaseOrderStatus)
+  status?: PurchaseOrderStatus;
 
   @IsOptional()
   @IsDateString()
@@ -93,10 +102,4 @@ export class FilterInvoiceDto {
   @IsNumber()
   @Min(1)
   limit?: number;
-}
-
-export class SendInvoiceEmailDto {
-  @IsOptional()
-  @IsString()
-  to?: string;
 }

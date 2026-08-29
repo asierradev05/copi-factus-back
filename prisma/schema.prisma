@@ -69,6 +69,37 @@ enum DianStatus {
   RECHAZADA
 }
 
+enum QuoteStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  FACTURADA
+}
+
+enum PurchaseOrderStatus {
+  SOLICITADA
+  APROBADA
+  RECIBIDA
+  CANCELADA
+}
+
+enum DeliveryOrderStatus {
+  PENDIENTE
+  ENTREGADA
+  CANCELADA
+}
+
+enum ResolutionType {
+  FACTURA
+  NOTA_CREDITO
+  OTRO
+}
+
+enum Ambient {
+  HABILITACION
+  PRODUCCION
+}
+
 model Profile {
   id        String   @id @default(uuid())
   authId    String?  @unique @map("auth_id")
@@ -85,6 +116,10 @@ model Profile {
   auditLogs        AuditLog[]
   recurringServicesCreated RecurringService[] @relation("RecurringServiceCreator")
   invoiceUploads        InvoiceUpload[]      @relation("InvoiceUploader")
+  quotesCreated         Quote[]              @relation("QuoteCreator")
+  purchaseOrdersCreated PurchaseOrder[]      @relation("PurchaseOrderCreator")
+  deliveryOrdersCreated DeliveryOrder[]      @relation("DeliveryOrderCreator")
+  receivedDocumentsCreated ReceivedDocument[] @relation("ReceivedDocumentCreator")
 
   @@map("profiles")
 }
@@ -107,6 +142,10 @@ model Customer {
   services Service[]
   invoices Invoice[]
   payments Payment[]
+  quotes Quote[]
+  purchaseOrders PurchaseOrder[]
+  deliveryOrders DeliveryOrder[]
+  receivedDocuments ReceivedDocument[]
 
   @@map("customers")
 }
@@ -190,15 +229,23 @@ model Invoice {
   resolutionNumber  String?   @map("resolution_number")
   resolutionDate    DateTime? @map("resolution_date")
   dianStatus    DianStatus    @default(NO_APLICA) @map("dian_status")
+  resolutionId  String?       @map("resolution_id")
+  isValid       Boolean       @default(true) @map("is_valid")
+  ambient       Ambient       @default(PRODUCCION) @map("ambient")
+  responseDian  Json?         @map("response_dian")
+  emailSentAt   DateTime?     @map("email_sent_at")
   createdById   String?       @map("created_by")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
   customer     Customer             @relation(fields: [customerId], references: [id])
   createdBy    Profile?             @relation("InvoiceCreator", fields: [createdById], references: [id])
+  resolution   Resolution?          @relation(fields: [resolutionId], references: [id])
   items        InvoiceItem[]
   serviceLinks ServiceInvoiceLink[]
   payments     Payment[]
+  purchaseOrders PurchaseOrder[]
+  deliveryOrders DeliveryOrder[]
 
   @@index([customerId])
   @@index([status])
@@ -368,4 +415,133 @@ model InvoiceUpload {
   uploadedBy Profile? @relation("InvoiceUploader", fields: [uploadedById], references: [id])
 
   @@map("invoice_uploads")
+}
+
+model DocumentSequence {
+  id    String @id
+  value Int    @default(0)
+
+  @@map("document_sequences")
+}
+
+model Quote {
+  id          String      @id @default(uuid())
+  quoteNumber String      @unique @map("quote_number")
+  customerId  String      @map("customer_id")
+  issueDate   DateTime    @map("issue_date")
+  validUntil  DateTime?   @map("valid_until")
+  items       Json
+  subtotal    Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal   @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal    Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total       Decimal     @default(0) @db.Decimal(12, 2)
+  status      QuoteStatus @default(PENDIENTE)
+  notes       String?
+  createdById String?     @map("created_by")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy Profile? @relation("QuoteCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([issueDate])
+  @@map("quotes")
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  poNumber    String              @unique @map("po_number")
+  customerId  String              @map("customer_id")
+  issueDate   DateTime            @map("issue_date")
+  expectedDate DateTime?          @map("expected_date")
+  items       Json
+  subtotal    Decimal             @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal           @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal    Decimal             @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total       Decimal             @default(0) @db.Decimal(12, 2)
+  status      PurchaseOrderStatus @default(SOLICITADA)
+  invoiceId   String?             @map("invoice_id")
+  notes       String?
+  createdById String?             @map("created_by")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdBy Profile? @relation("PurchaseOrderCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([issueDate])
+  @@map("purchase_orders")
+}
+
+model DeliveryOrder {
+  id          String              @id @default(uuid())
+  doNumber    String              @unique @map("do_number")
+  customerId  String              @map("customer_id")
+  invoiceId   String?             @map("invoice_id")
+  scheduledAt DateTime?           @map("scheduled_at")
+  deliveredAt DateTime?           @map("delivered_at")
+  items       Json
+  status      DeliveryOrderStatus @default(PENDIENTE)
+  notes       String?
+  createdById String?             @map("created_by")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdBy Profile? @relation("DeliveryOrderCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@map("delivery_orders")
+}
+
+model Resolution {
+  id               String         @id @default(uuid())
+  prefix           String
+  resolutionNumber String         @map("resolution_number")
+  from             Int
+  to               Int
+  next             Int
+  dateFrom         DateTime?      @map("date_from")
+  dateTo           DateTime?      @map("date_to")
+  type             ResolutionType @default(FACTURA)
+  isActive         Boolean        @default(true) @map("is_active")
+  ambient          Ambient        @default(PRODUCCION)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  @@index([type])
+  @@map("resolutions")
+}
+
+model ReceivedDocument {
+  id            String   @id @default(uuid())
+  customerId    String?  @map("customer_id")
+  supplierName  String   @map("supplier_name")
+  supplierNit   String?  @map("supplier_nit")
+  documentNumber String  @map("document_number")
+  issueDate     DateTime @map("issue_date")
+  amount        Decimal  @db.Decimal(12, 2)
+  taxAmount     Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  concept       String?
+  filePath      String?  @map("file_path")
+  notes         String?
+  createdById   String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy Profile?  @relation("ReceivedDocumentCreator", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([issueDate])
+  @@map("received_documents")
 }

@@ -4,28 +4,42 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, InvoiceStatus, Prisma } from '@prisma/client';
+import {
+  AuditAction,
+  Ambient,
+  DianStatus,
+  InvoiceStatus,
+  Prisma,
+} from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EmailService } from '../common/email/email.service';
+import { generateInvoicePdf } from '../common/pdf/invoice-pdf.util';
+import type {
+  CompanyPdfModel,
+  InvoicePdfModel,
+} from '../common/pdf/invoice-pdf.util';
+import { generateCufe } from '../common/utils/cufe.util';
 import { globalStore } from '../database/in-memory-store';
 import {
   calculateLineTotal,
   sumDecimals,
   toDecimal,
 } from '../common/utils/money.util';
-import { allocateInvoiceNumber } from '../common/utils/invoice-number.util';
+import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
 import {
-  isOverdue,
-  resolveInvoiceStatus,
-} from '../common/utils/invoice-status.util';
-import { CreateInvoiceDto, FilterInvoiceDto } from './dto/invoice.dto';
+  CreateInvoiceDto,
+  FilterInvoiceDto,
+  SendInvoiceEmailDto,
+} from './dto/invoice.dto';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly email: EmailService,
   ) {}
 
   async findAll(filters: FilterInvoiceDto) {
@@ -37,6 +51,30 @@ export class InvoicesService {
       const where: Prisma.InvoiceWhereInput = {};
       if (filters.customerId) where.customerId = filters.customerId;
       if (filters.status) where.status = filters.status as InvoiceStatus;
+      if (filters.search) {
+        where.OR = [
+          { invoiceNumber: { contains: filters.search, mode: 'insensitive' } },
+          {
+            customer: {
+              name: { contains: filters.search, mode: 'insensitive' },
+            },
+          },
+          {
+            customer: {
+              documentNumber: {
+                contains: filters.search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ];
+      }
+      if (filters.from || filters.to) {
+        where.issueDate = {
+          ...(filters.from ? { gte: new Date(filters.from) } : {}),
+          ...(filters.to ? { lte: new Date(filters.to) } : {}),
+        };
+      }
 
       const [rawData, total] = await Promise.all([
         this.prisma.invoice.findMany({
@@ -64,6 +102,29 @@ export class InvoicesService {
       }
       if (filters.status) {
         filtered = filtered.filter((i) => i.status === filters.status);
+      }
+      if (filters.search) {
+        const term = filters.search.toLowerCase();
+        filtered = filtered.filter((i) => {
+          const customer = globalStore.customers.find(
+            (c) => c.id === i.customerId,
+          );
+          return (
+            (i.invoiceNumber ?? '').toLowerCase().includes(term) ||
+            (customer?.name ?? '').toLowerCase().includes(term) ||
+            (customer?.documentNumber ?? '').toLowerCase().includes(term)
+          );
+        });
+      }
+      if (filters.from || filters.to) {
+        filtered = filtered.filter((i) => {
+          if (!i.issueDate) return true;
+          const date = new Date(i.issueDate).getTime();
+          return (
+            (!filters.from || date >= new Date(filters.from).getTime()) &&
+            (!filters.to || date <= new Date(filters.to).getTime())
+          );
+        });
       }
       const data = filtered.slice(skip, skip + limit);
       const total = filtered.length;
@@ -141,13 +202,15 @@ export class InvoicesService {
         include: { items: true, customer: true },
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.CREATE,
-        entityType: 'Invoice',
-        entityId: invoice.id,
-        newValue: invoice,
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.CREATE,
+          entityType: 'Invoice',
+          entityId: invoice.id,
+          newValue: invoice,
+        })
+        .catch(() => {});
 
       return invoice;
     } catch {
@@ -198,7 +261,44 @@ export class InvoicesService {
 
     try {
       const invoice = await this.prisma.$transaction(async (tx) => {
-        const { invoiceNumber } = await allocateInvoiceNumber(tx);
+        const rows = await tx.$queryRaw<
+          Array<{
+            id: string;
+            prefix: string;
+            next: number;
+            to: number;
+            resolution_number: string;
+            ambient: string;
+          }>
+        >`
+          SELECT id, prefix, next, "to", resolution_number, is_active, ambient
+          FROM resolutions
+          WHERE type = 'FACTURA' AND is_active = TRUE AND next <= "to"
+          ORDER BY created_at ASC
+          LIMIT 1
+          FOR UPDATE
+        `;
+
+        const resolution = rows[0];
+        if (!resolution) {
+          throw new BadRequestException(
+            'No hay una resolución activa disponible para facturar.',
+          );
+        }
+
+        const invoiceNumber = `${resolution.prefix}${String(resolution.next).padStart(6, '0')}`;
+        const cufe = generateCufe(
+          invoiceNumber,
+          JSON.stringify({
+            customerId: existing.customerId,
+            total: Number(existing.total),
+          }),
+        );
+
+        await tx.resolution.update({
+          where: { id: resolution.id },
+          data: { next: resolution.next + 1 },
+        });
 
         return tx.invoice.update({
           where: { id },
@@ -206,26 +306,44 @@ export class InvoicesService {
             invoiceNumber,
             issueDate: new Date(),
             status: InvoiceStatus.EMITIDA,
+            resolutionId: resolution.id,
+            resolutionNumber: resolution.resolution_number,
+            resolutionDate: new Date(),
+            ambient: resolution.ambient as Ambient,
+            cufe,
+            dianStatus: DianStatus.PENDIENTE,
           },
           include: { items: true, customer: true },
         });
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.EMIT,
-        entityType: 'Invoice',
-        entityId: invoice.id,
-        oldValue: { status: existing.status },
-        newValue: invoice,
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.EMIT,
+          entityType: 'Invoice',
+          entityId: invoice.id,
+          oldValue: { status: existing.status },
+          newValue: invoice,
+        })
+        .catch(() => {});
 
       return invoice;
-    } catch {
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+
       const nextNum = globalStore.companySettings.invoiceNextNumber++;
       existing.invoiceNumber = `${globalStore.companySettings.invoicePrefix}-${String(nextNum).padStart(6, '0')}`;
       existing.issueDate = new Date();
       existing.status = InvoiceStatus.EMITIDA;
+      existing.cufe = generateCufe(
+        existing.invoiceNumber,
+        JSON.stringify({
+          customerId: existing.customerId,
+          total: Number(existing.total ?? 0),
+        }),
+      );
+      existing.dianStatus = DianStatus.PENDIENTE;
       return existing;
     }
   }
@@ -262,6 +380,178 @@ export class InvoicesService {
       existing.balance = 0;
       return existing;
     }
+  }
+
+  async getPdfContext(id: string) {
+    const invoice = await this.findOne(id);
+    const company = await this.getCompanyPdfModel();
+    return { invoice: this.toPdfModel(invoice), company };
+  }
+
+  async getPdfBuffer(id: string): Promise<Buffer> {
+    const { invoice, company } = await this.getPdfContext(id);
+    return generateInvoicePdf(invoice, company);
+  }
+
+  async sendInvoiceEmail(
+    id: string,
+    dto: SendInvoiceEmailDto,
+    actorId: string,
+  ) {
+    const invoice = await this.findOne(id);
+
+    if (invoice.status === InvoiceStatus.BORRADOR) {
+      throw new BadRequestException(
+        'No se puede enviar una factura en estado borrador.',
+      );
+    }
+
+    if (!invoice.invoiceNumber) {
+      throw new BadRequestException(
+        'La factura aún no tiene un número asignado.',
+      );
+    }
+
+    const customer = invoice.customer
+      ? invoice.customer
+      : globalStore.customers.find((c) => c.id === invoice.customerId);
+    const targetEmail = (dto.to ?? '').trim() || customer?.email || null;
+
+    if (!targetEmail) {
+      throw new BadRequestException(
+        'Debe indicar un correo de destino o registrar el correo del cliente.',
+      );
+    }
+
+    const company = await this.getCompanyPdfModel();
+    const pdfBuffer = await generateInvoicePdf(
+      this.toPdfModel(invoice),
+      company,
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
+    const html = `
+      <div style="font-family:Arial, sans-serif; color:#222;">
+        <h2>${company.name}</h2>
+        <p>Cordial saludo${customer ? `, <b>${customer.name}</b>` : ''}.</p>
+        <p>Adjuntamos la factura de venta <b>${invoice.invoiceNumber}</b>
+        por un total de <b>${Number(invoice.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</b>.</p>
+        <p>Puede consultarla en línea: <a href="${frontendUrl}/invoices/${id}">Ver factura</a></p>
+        <p style="color:#888; font-size:12px;">Este mensaje fue generado automáticamente por ${company.name}.</p>
+      </div>
+    `;
+
+    const result = await this.email.sendMail({
+      to: targetEmail,
+      subject: `Factura ${invoice.invoiceNumber} - ${company.name}`,
+      html,
+      attachments: [
+        { filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer },
+      ],
+    });
+
+    try {
+      await this.prisma.invoice.update({
+        where: { id },
+        data: { emailSentAt: new Date() },
+      });
+    } catch {
+      invoice.emailSentAt = new Date();
+    }
+
+    await this.auditService
+      .log({
+        userId: actorId,
+        action: AuditAction.UPDATE,
+        entityType: 'Invoice',
+        entityId: id,
+        newValue: { emailSentAt: new Date(), to: targetEmail },
+      })
+      .catch(() => {});
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      to: targetEmail,
+      simulated: result.simulated,
+    };
+  }
+
+  private toPdfModel(invoice: any): InvoicePdfModel {
+    const customer = invoice.customer
+      ? invoice.customer
+      : (globalStore.customers.find((c) => c.id === invoice.customerId) ??
+        null);
+
+    return {
+      invoiceNumber: invoice.invoiceNumber ?? null,
+      issueDate: invoice.issueDate ?? null,
+      dueDate: invoice.dueDate ?? null,
+      status: invoice.status,
+      subtotal: Number(invoice.subtotal ?? 0),
+      discountTotal: Number(invoice.discountTotal ?? 0),
+      taxTotal: Number(invoice.taxTotal ?? 0),
+      total: Number(invoice.total ?? 0),
+      paidAmount: Number(invoice.paidAmount ?? 0),
+      balance: Number(invoice.balance ?? invoice.total ?? 0),
+      notes: invoice.notes ?? null,
+      cufe: invoice.cufe ?? null,
+      dianStatus: invoice.dianStatus ?? 'NO_APLICA',
+      resolutionNumber: invoice.resolutionNumber ?? null,
+      resolutionDate: invoice.resolutionDate ?? null,
+      customer: {
+        name: customer?.name ?? 'Cliente',
+        documentType: customer?.documentType ?? null,
+        documentNumber: customer?.documentNumber ?? null,
+        address: customer?.address ?? null,
+        phone: customer?.phone ?? null,
+        email: customer?.email ?? null,
+        city: customer?.city ?? null,
+      },
+      items: (invoice.items ?? []).map((item: any) => ({
+        description: item.description ?? '',
+        quantity: Number(item.quantity ?? 0),
+        unitPrice: Number(item.unitPrice ?? 0),
+        discount: Number(item.discount ?? 0),
+        taxRate: Number(item.taxRate ?? 0),
+        subtotal: Number(item.subtotal ?? 0),
+        taxAmount: Number(item.taxAmount ?? 0),
+        total: Number(item.total ?? 0),
+      })),
+    };
+  }
+
+  private async getCompanyPdfModel(): Promise<CompanyPdfModel> {
+    try {
+      const settings = await this.prisma.companySettings.findUnique({
+        where: { id: 'default' },
+      });
+
+      if (settings) {
+        return {
+          name: settings.name,
+          legalName: settings.legalName,
+          taxId: settings.taxId,
+          address: settings.address,
+          phone: settings.phone,
+          email: settings.email,
+          city: settings.city,
+          logoUrl: settings.logoUrl,
+        };
+      }
+    } catch {}
+
+    const settings = globalStore.companySettings;
+    return {
+      name: settings.name ?? 'CopiGráfica Sierra',
+      legalName: settings.legalName ?? settings.name ?? 'CopiGráfica Sierra',
+      taxId: settings.taxId ?? null,
+      address: settings.address ?? null,
+      phone: settings.phone ?? null,
+      email: settings.email ?? null,
+      city: settings.city ?? null,
+      logoUrl: settings.logoUrl ?? null,
+    };
   }
 
   async recalculateBalance(invoiceId: string, tx?: Prisma.TransactionClient) {
