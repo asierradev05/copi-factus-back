@@ -65,4 +65,4 @@ La lógica financiera (totales, saldos, consecutivos) se calcula siempre en el b
 
 ## Repo relacionado
 
-- Frontend: [copi-factus-front](https://github.com/YOUR_ORG/copi-factus-front)
+- Frontend: [copi-factus-front](https://github.com/asierradev05/copi-factus-front)
