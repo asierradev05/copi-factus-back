@@ -77,8 +77,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message,
       ...(details !== undefined ? { details } : {}),
+      path: this.getRequestPath(host),
       timestamp: new Date().toISOString(),
     });
+  }
+
+  private getRequestPath(host: ArgumentsHost): string {
+    try {
+      const request = host.switchToHttp().getRequest<{ url?: string }>();
+      return request.url ?? '';
+    } catch {
+      return '';
+    }
   }
 
   private mapPrismaErrorStatus(
@@ -86,6 +96,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
   ): number {
     switch (error.code) {
       case 'P2002':
+      case 'P2003':
         return HttpStatus.CONFLICT;
       case 'P2025':
         return HttpStatus.NOT_FOUND;
@@ -99,11 +110,50 @@ export class HttpExceptionFilter implements ExceptionFilter {
   ): string {
     switch (error.code) {
       case 'P2002':
-        return 'Ya existe un registro con esos datos únicos.';
+        return this.mapUniqueFieldMessage(error);
+      case 'P2003':
+        return 'No se puede completar porque tiene registros relacionados.';
       case 'P2025':
         return 'El registro solicitado no fue encontrado.';
       default:
         return 'Error al procesar la operación en la base de datos.';
     }
+  }
+
+  private mapUniqueFieldMessage(
+    error: Prisma.PrismaClientKnownRequestError,
+  ): string {
+    const target = Array.isArray(error.meta?.target)
+      ? (error.meta.target as string[]).join(',')
+      : String(error.meta?.target ?? '');
+    const modelName = String(error.meta?.modelName ?? '');
+
+    if (target) {
+      const fieldMessages: Record<string, string> = {
+        document_number: 'Ya existe un cliente con ese número de documento.',
+        email: 'Ya existe un registro con ese correo electrónico.',
+        code: 'Ya existe un producto con ese código.',
+        name: 'Ya existe un registro con ese nombre.',
+        invoice_number: 'Ya existe una factura con ese número.',
+      };
+
+      for (const [key, msg] of Object.entries(fieldMessages)) {
+        if (target.includes(key)) return msg;
+      }
+    }
+
+    const modelMessages: Record<string, string> = {
+      Profile: 'Ya existe un usuario con ese correo electrónico.',
+      Customer: 'Ya existe un cliente con ese número de documento.',
+      Product: 'Ya existe un producto con ese código.',
+      ServiceType: 'Ya existe un tipo de servicio con ese nombre.',
+      ServiceCategory: 'Ya existe una categoría con ese nombre.',
+      ServiceSubcategory:
+        'Ya existe una suscripción con ese nombre en esa categoría.',
+    };
+
+    if (modelMessages[modelName]) return modelMessages[modelName];
+
+    return 'Ya existe un registro con esos datos únicos.';
   }
 }

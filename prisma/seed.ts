@@ -20,6 +20,10 @@ async function main() {
   console.log('🌱 Seeding Copigrafica Sierra DEV data...');
 
   await prisma.auditLog.deleteMany();
+  await prisma.recurringService.deleteMany();
+  await prisma.serviceSubcategory.deleteMany();
+  await prisma.serviceCategory.deleteMany();
+  await prisma.invoiceUpload.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.serviceInvoiceLink.deleteMany();
   await prisma.invoiceItem.deleteMany();
@@ -69,7 +73,7 @@ async function main() {
       email: 'contacto@copigrafica.dev',
       city: 'Bogotá',
       invoicePrefix: 'FAC',
-      invoiceNextNumber: 1001,
+      invoiceNextNumber: 1002,
     },
   });
 
@@ -280,6 +284,68 @@ async function main() {
     },
   });
 
+  const basicCategory = await prisma.serviceCategory.create({
+    data: {
+      name: 'Servicios públicos',
+      description: '[DEV] Agua, luz e internet',
+    },
+  });
+
+  const homeSubcategory = await prisma.serviceSubcategory.create({
+    data: {
+      categoryId: basicCategory.id,
+      name: 'Casa principal',
+      description: '[DEV] Sede principal',
+    },
+  });
+
+  const shopSubcategory = await prisma.serviceSubcategory.create({
+    data: {
+      categoryId: basicCategory.id,
+      name: 'Local comercial',
+      description: '[DEV] Local de ventas',
+    },
+  });
+
+  await Promise.all([
+    prisma.recurringService.create({
+      data: {
+        categoryId: basicCategory.id,
+        subcategoryId: homeSubcategory.id,
+        name: 'Agua',
+        provider: 'Acueducto de Bogotá',
+        amount: 68500,
+        billingDay: 5,
+        status: 'ACTIVO' as const,
+        createdById: admin.id,
+      },
+    }),
+    prisma.recurringService.create({
+      data: {
+        categoryId: basicCategory.id,
+        subcategoryId: homeSubcategory.id,
+        name: 'Energía eléctrica',
+        provider: 'ENEL',
+        amount: 145300,
+        billingDay: 12,
+        status: 'ACTIVO' as const,
+        createdById: admin.id,
+      },
+    }),
+    prisma.recurringService.create({
+      data: {
+        categoryId: basicCategory.id,
+        subcategoryId: shopSubcategory.id,
+        name: 'Internet fibra',
+        provider: 'ETB',
+        amount: 99000,
+        billingDay: 20,
+        status: 'ACTIVO' as const,
+        createdById: admin.id,
+      },
+    }),
+  ]);
+
   console.log('✅ DEV seed completed:');
   console.log(`   Admin:      admin@copigrafica.dev / Admin123! (DEV_PASSWORD)`);
   console.log(`   Facturador: facturador@copigrafica.dev / Admin123!`);
@@ -287,6 +353,7 @@ async function main() {
   console.log(`   Customer:   ${customer.name} (${customer.documentNumber})`);
   console.log(`   Invoices:   ${invoice1.invoiceNumber}, ${invoice2.invoiceNumber}, borrador ${invoice3.id}`);
   console.log(`   Service pending invoice: ${service2.description}`);
+  console.log(`   Recurring:  Agua, Energía eléctrica, Internet fibra -> ${basicCategory.name}`);
   console.log(`   Profiles created: admin=${admin.id}, facturador=${facturador.id}, consulta=${consulta.id}`);
 }
 

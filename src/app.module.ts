@@ -15,6 +15,8 @@ import { AccountsReceivableModule } from './accounts-receivable/accounts-receiva
 import { ReportsModule } from './reports/reports.module';
 import { AuditModule } from './audit/audit.module';
 import { SettingsModule } from './settings/settings.module';
+import { RecurringServicesModule } from './recurring-services/recurring-services.module';
+import { InvoiceUploadsModule } from './invoice-uploads/invoice-uploads.module';
 import { SupabaseModule } from './common/supabase/supabase.module';
 
 @Module({
@@ -39,6 +41,8 @@ import { SupabaseModule } from './common/supabase/supabase.module';
     ReportsModule,
     AuditModule,
     SettingsModule,
+    RecurringServicesModule,
+    InvoiceUploadsModule,
   ],
   providers: [
     {

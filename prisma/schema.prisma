@@ -55,6 +55,20 @@ enum AuditAction {
   LOGIN
 }
 
+enum RecurringServiceStatus {
+  ACTIVO
+  PAGADO
+  CANCELADO
+}
+
+enum DianStatus {
+  NO_APLICA
+  PENDIENTE
+  ENVIADA
+  VALIDADA
+  RECHAZADA
+}
+
 model Profile {
   id        String   @id @default(uuid())
   authId    String?  @unique @map("auth_id")
@@ -69,6 +83,8 @@ model Profile {
   invoicesCreated  Invoice[]  @relation("InvoiceCreator")
   paymentsCreated  Payment[]  @relation("PaymentCreator")
   auditLogs        AuditLog[]
+  recurringServicesCreated RecurringService[] @relation("RecurringServiceCreator")
+  invoiceUploads        InvoiceUpload[]      @relation("InvoiceUploader")
 
   @@map("profiles")
 }
@@ -170,6 +186,10 @@ model Invoice {
   status        InvoiceStatus @default(BORRADOR)
   notes         String?
   cancelledAt   DateTime?     @map("cancelled_at")
+  cufe          String?       @map("cufe")
+  resolutionNumber  String?   @map("resolution_number")
+  resolutionDate    DateTime? @map("resolution_date")
+  dianStatus    DianStatus    @default(NO_APLICA) @map("dian_status")
   createdById   String?       @map("created_by")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
@@ -274,4 +294,78 @@ model CompanySettings {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("company_settings")
+}
+
+model ServiceCategory {
+  id           String               @id @default(uuid())
+  name         String               @unique
+  description  String?
+  isActive     Boolean              @default(true) @map("is_active")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+
+  subcategories ServiceSubcategory[]
+  services      RecurringService[]
+
+  @@map("service_categories")
+}
+
+model ServiceSubcategory {
+  id          String              @id @default(uuid())
+  categoryId  String              @map("category_id")
+  name        String
+  description String?
+  isActive    Boolean             @default(true) @map("is_active")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  category ServiceCategory   @relation(fields: [categoryId], references: [id])
+  services RecurringService[]
+
+  @@unique([categoryId, name])
+  @@map("service_subcategories")
+}
+
+model RecurringService {
+  id            String                @id @default(uuid())
+  categoryId    String                @map("category_id")
+  subcategoryId String                @map("subcategory_id")
+  name          String
+  provider      String?
+  description   String?
+  amount        Decimal               @default(0) @db.Decimal(12, 2)
+  billingDay    Int?                  @map("billing_day")
+  status        RecurringServiceStatus @default(ACTIVO)
+  dueDate       DateTime?             @map("due_date")
+  lastPaidAt    DateTime?             @map("last_paid_at")
+  notes         String?
+  createdById   String?               @map("created_by")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  category    ServiceCategory    @relation(fields: [categoryId], references: [id])
+  subcategory ServiceSubcategory @relation(fields: [subcategoryId], references: [id])
+  createdBy   Profile?           @relation("RecurringServiceCreator", fields: [createdById], references: [id])
+
+  @@index([categoryId])
+  @@index([subcategoryId])
+  @@index([status])
+  @@map("recurring_services")
+}
+
+model InvoiceUpload {
+  id               String     @id @default(uuid())
+  fileName         String     @map("file_name")
+  filePath         String     @map("file_path")
+  fileSize         Int        @map("file_size")
+  extractedNit     String?    @map("extracted_nit")
+  extractedDate    DateTime?  @map("extracted_date")
+  extractedAmount  Decimal?   @db.Decimal(12, 2) @map("extracted_amount")
+  extractedConcept String?    @map("extracted_concept")
+  uploadedById     String?    @map("uploaded_by")
+  createdAt        DateTime   @default(now()) @map("created_at")
+
+  uploadedBy Profile? @relation("InvoiceUploader", fields: [uploadedById], references: [id])
+
+  @@map("invoice_uploads")
 }

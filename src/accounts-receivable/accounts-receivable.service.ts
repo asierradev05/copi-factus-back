@@ -29,6 +29,8 @@ export class AccountsReceivableService {
     let totalReceivable = new Decimal(0);
     let totalOverdue = new Decimal(0);
     let overdueCount = 0;
+    let nextDueDate: Date | null = null;
+    let nextDueDays: number | null = null;
 
     for (const invoice of invoices) {
       const balance = invoice.balance;
@@ -37,6 +39,17 @@ export class AccountsReceivableService {
         if (isOverdue(invoice.dueDate, balance)) {
           totalOverdue = totalOverdue.add(balance);
           overdueCount += 1;
+        } else if (invoice.dueDate) {
+          if (!nextDueDate || invoice.dueDate < nextDueDate) {
+            nextDueDate = invoice.dueDate;
+            nextDueDays = Math.max(
+              0,
+              Math.floor(
+                (invoice.dueDate.getTime() - Date.now()) /
+                  (1000 * 60 * 60 * 24),
+              ),
+            );
+          }
         }
       }
     }
@@ -47,6 +60,8 @@ export class AccountsReceivableService {
       overdueCount,
       openInvoicesCount: invoices.filter((i) => i.balance.greaterThan(0))
         .length,
+      nextDueDate: nextDueDate ? nextDueDate.toISOString() : null,
+      nextDueDays,
     };
   }
 
@@ -105,11 +120,30 @@ export class AccountsReceivableService {
               )
             : 0;
 
+        const daysRemaining =
+          overdue || !invoice.dueDate
+            ? null
+            : Math.max(
+                0,
+                Math.floor(
+                  (invoice.dueDate.getTime() - Date.now()) /
+                    (1000 * 60 * 60 * 24),
+                ),
+              );
+
+        const urgency: 'VENCIDA' | 'PROXIMA' | 'AL_DIA' = overdue
+          ? 'VENCIDA'
+          : daysRemaining !== null && daysRemaining <= 5
+            ? 'PROXIMA'
+            : 'AL_DIA';
+
         return {
           ...invoice,
           status,
           isOverdue: overdue,
           daysOverdue: daysOverdue > 0 ? daysOverdue : 0,
+          daysRemaining,
+          urgency,
           balance: invoice.balance.toFixed(2),
           total: invoice.total.toFixed(2),
           paidAmount: invoice.paidAmount.toFixed(2),
