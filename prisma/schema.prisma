@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  FACTURADOR
+  CONSULTA
+}
+
+enum DocumentType {
+  CC
+  NIT
+  CE
+  PASAPORTE
+  OTRO
+}
+
+enum ServiceStatus {
+  SOLICITADO
+  EN_PROCESO
+  TERMINADO
+  ENTREGADO
+  FACTURADO
+  CANCELADO
+}
+
+enum InvoiceStatus {
+  BORRADOR
+  EMITIDA
+  PARCIALMENTE_PAGADA
+  PAGADA
+  VENCIDA
+  CANCELADA
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  OTRO
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  EMIT
+  CANCEL
+  PAYMENT
+  LOGIN
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  authId    String?  @unique @map("auth_id")
+  email     String   @unique
+  fullName  String   @map("full_name")
+  role      UserRole @default(FACTURADOR)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  servicesCreated  Service[]  @relation("ServiceCreator")
+  invoicesCreated  Invoice[]  @relation("InvoiceCreator")
+  paymentsCreated  Payment[]  @relation("PaymentCreator")
+  auditLogs        AuditLog[]
+
+  @@map("profiles")
+}
+
+model Customer {
+  id             String       @id @default(uuid())
+  name           String
+  documentType   DocumentType @map("document_type")
+  documentNumber String       @unique @map("document_number")
+  phone          String?
+  email          String?
+  address        String?
+  city           String?
+  notes          String?
+  isActive       Boolean      @default(true) @map("is_active")
+  deletedAt      DateTime?    @map("deleted_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  services Service[]
+  invoices Invoice[]
+  payments Payment[]
+
+  @@map("customers")
+}
+
+model ServiceType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  services Service[]
+
+  @@map("service_types")
+}
+
+model Service {
+  id            String        @id @default(uuid())
+  customerId    String        @map("customer_id")
+  serviceTypeId String        @map("service_type_id")
+  description   String
+  quantity      Decimal       @db.Decimal(12, 2)
+  unitPrice     Decimal       @map("unit_price") @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  taxRate       Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  subtotal      Decimal       @db.Decimal(12, 2)
+  total         Decimal       @db.Decimal(12, 2)
+  requestedAt   DateTime      @map("requested_at")
+  deliveryDate  DateTime?     @map("delivery_date")
+  status        ServiceStatus @default(SOLICITADO)
+  assignedTo    String?       @map("assigned_to")
+  notes         String?
+  createdById   String?       @map("created_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  customer    Customer             @relation(fields: [customerId], references: [id])
+  serviceType ServiceType          @relation(fields: [serviceTypeId], references: [id])
+  createdBy   Profile?             @relation("ServiceCreator", fields: [createdById], references: [id])
+  invoiceLink ServiceInvoiceLink?
+
+  @@index([customerId])
+  @@index([status])
+  @@map("services")
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  name        String
+  description String?
+  unitPrice   Decimal   @map("unit_price") @db.Decimal(12, 2)
+  taxRate     Decimal   @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  isActive    Boolean   @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  invoiceItems InvoiceItem[]
+
+  @@map("products")
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String?       @unique @map("invoice_number")
+  customerId    String        @map("customer_id")
+  issueDate     DateTime?     @map("issue_date")
+  dueDate       DateTime?     @map("due_date")
+  subtotal      Decimal       @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal       @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal      Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total         Decimal       @default(0) @db.Decimal(12, 2)
+  paidAmount    Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  balance       Decimal       @default(0) @db.Decimal(12, 2)
+  status        InvoiceStatus @default(BORRADOR)
+  notes         String?
+  cancelledAt   DateTime?     @map("cancelled_at")
+  createdById   String?       @map("created_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  customer     Customer             @relation(fields: [customerId], references: [id])
+  createdBy    Profile?             @relation("InvoiceCreator", fields: [createdById], references: [id])
+  items        InvoiceItem[]
+  serviceLinks ServiceInvoiceLink[]
+  payments     Payment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String   @map("invoice_id")
+  productId   String?  @map("product_id")
+  description String
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  subtotal    Decimal  @db.Decimal(12, 2)
+  taxAmount   Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model ServiceInvoiceLink {
+  id        String   @id @default(uuid())
+  serviceId String   @unique @map("service_id")
+  invoiceId String   @map("invoice_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  service Service @relation(fields: [serviceId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("service_invoice_links")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  invoiceId     String        @map("invoice_id")
+  customerId    String        @map("customer_id")
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @map("payment_method")
+  paymentDate   DateTime      @map("payment_date")
+  reference     String?
+  notes         String?
+  createdById   String?       @map("created_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy Profile? @relation("PaymentCreator", fields: [createdById], references: [id])
+
+  @@index([invoiceId])
+  @@index([customerId])
+  @@map("payments")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?     @map("user_id")
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  oldValue   Json?       @map("old_value")
+  newValue   Json?       @map("new_value")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user Profile? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model CompanySettings {
+  id                 String   @id @default("default")
+  name               String
+  legalName          String   @map("legal_name")
+  taxId              String?  @map("tax_id")
+  logoUrl            String?  @map("logo_url")
+  address            String?
+  phone              String?
+  email              String?
+  city               String?
+  invoicePrefix      String   @default("FAC") @map("invoice_prefix")
+  invoiceNextNumber  Int      @default(1) @map("invoice_next_number")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("company_settings")
+}
