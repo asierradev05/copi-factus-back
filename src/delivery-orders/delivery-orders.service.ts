@@ -3,10 +3,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, DeliveryOrderStatus, Prisma } from '@prisma/client';
+import {
+  AuditAction,
+  DeliveryOrderStatus,
+  InvoiceStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { nextDocumentNumber } from '../common/utils/document-sequence.util';
+import { toDecimal } from '../common/utils/money.util';
 import {
   CreateDeliveryOrderDto,
   FilterDeliveryOrderDto,
@@ -40,7 +46,7 @@ export class DeliveryOrdersService {
     const [data, total] = await Promise.all([
       this.prisma.deliveryOrder.findMany({
         where,
-        include: { customer: true, invoice: true },
+        include: { customer: true, invoice: true, purchaseOrder: true },
         orderBy: { scheduledAt: 'desc' },
         skip,
         take: limit,
@@ -57,7 +63,7 @@ export class DeliveryOrdersService {
   async findOne(id: string) {
     const doo = await this.prisma.deliveryOrder.findUnique({
       where: { id },
-      include: { customer: true, invoice: true },
+      include: { customer: true, invoice: true, purchaseOrder: true },
     });
     if (!doo) {
       throw new NotFoundException('La orden de entrega no fue encontrada.');
@@ -99,7 +105,7 @@ export class DeliveryOrdersService {
         notes: dto.notes?.trim(),
         createdById: userId,
       },
-      include: { customer: true, invoice: true },
+      include: { customer: true, invoice: true, purchaseOrder: true },
     });
 
     await this.audit
@@ -134,7 +140,7 @@ export class DeliveryOrdersService {
           ? { deliveredAt: new Date() }
           : {}),
       },
-      include: { customer: true, invoice: true },
+      include: { customer: true, invoice: true, purchaseOrder: true },
     });
 
     await this.audit
@@ -152,5 +158,105 @@ export class DeliveryOrdersService {
       .catch(() => {});
 
     return doo;
+  }
+
+  async convertToInvoice(id: string, userId: string) {
+    const doo = await this.findOne(id);
+
+    if (doo.status === DeliveryOrderStatus.CANCELADA) {
+      throw new BadRequestException(
+        'No se puede facturar una orden de entrega cancelada.',
+      );
+    }
+    if (doo.invoiceId) {
+      throw new BadRequestException(
+        'Esta orden de entrega ya tiene una factura asociada.',
+      );
+    }
+
+    const items = doo.items as Prisma.InputJsonValue as Array<{
+      description: string;
+      quantity: number;
+      unitPrice?: number;
+      discount?: number;
+      taxRate?: number;
+    }>;
+
+    const computed = items.map((item) => {
+      const quantity = toDecimal(item.quantity);
+      const unitPrice = toDecimal(item.unitPrice ?? 0);
+      const discount = toDecimal(item.discount ?? 0);
+      const taxRate = toDecimal(item.taxRate ?? 0);
+      const subtotal = quantity.mul(unitPrice).sub(discount);
+      const taxAmount = subtotal.mul(taxRate).div(100);
+      const total = subtotal.add(taxAmount);
+      return {
+        description: item.description,
+        quantity,
+        unitPrice,
+        discount,
+        taxRate,
+        subtotal,
+        taxAmount,
+        total,
+      };
+    });
+
+    const subtotal = computed.reduce((s, i) => s.add(i.subtotal), toDecimal(0));
+    const discountTotal = computed.reduce(
+      (s, i) => s.add(i.discount),
+      toDecimal(0),
+    );
+    const taxTotal = computed.reduce(
+      (s, i) => s.add(i.taxAmount),
+      toDecimal(0),
+    );
+    const total = computed.reduce((s, i) => s.add(i.total), toDecimal(0));
+
+    const invoice = await this.prisma.invoice.create({
+      data: {
+        customerId: doo.customerId,
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        subtotal: subtotal,
+        discountTotal: discountTotal,
+        taxTotal: taxTotal,
+        total: total,
+        paidAmount: toDecimal(0),
+        balance: total,
+        status: InvoiceStatus.BORRADOR,
+        notes: doo.notes,
+        createdById: userId,
+        items: {
+          create: computed.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            discount: item.discount,
+            taxRate: item.taxRate,
+            subtotal: item.subtotal,
+            taxAmount: item.taxAmount,
+            total: item.total,
+          })),
+        },
+      },
+      include: { items: true, customer: true },
+    });
+
+    await this.prisma.deliveryOrder.update({
+      where: { id: doo.id },
+      data: { invoiceId: invoice.id },
+    });
+
+    await this.audit
+      .log({
+        userId,
+        action: AuditAction.CREATE,
+        entityType: 'Invoice',
+        entityId: invoice.id,
+        newValue: { source: 'DeliveryOrder', doNumber: doo.doNumber },
+      })
+      .catch(() => {});
+
+    return invoice;
   }
 }

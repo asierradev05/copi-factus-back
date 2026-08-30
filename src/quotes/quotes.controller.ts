@@ -53,4 +53,13 @@ export class QuotesController {
   ) {
     return this.quotes.updateStatus(id, dto, user.id);
   }
+
+  @Post(':id/purchase-order')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  convertToPurchaseOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.quotes.convertToPurchaseOrder(id, user.id);
+  }
 }

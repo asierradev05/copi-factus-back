@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import { AuditAction } from '@prisma/client';
@@ -44,5 +45,6 @@ export class FilterAuditDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }

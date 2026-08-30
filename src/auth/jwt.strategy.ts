@@ -19,8 +19,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly authService: AuthService,
   ) {
     const supabaseSecret = configService.get<string>('SUPABASE_JWT_SECRET');
-    const jwtSecret =
-      configService.get<string>('JWT_SECRET') ?? 'dev-jwt-secret';
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    if (
+      !jwtSecret ||
+      jwtSecret === 'dev-jwt-secret' ||
+      jwtSecret.length < 16
+    ) {
+      throw new Error(
+        'JWT_SECRET no configurado correctamente. Usa un secreto fuerte (>= 16 caracteres).',
+      );
+    }
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

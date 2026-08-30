@@ -1,74 +1,34 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { AuditAction } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../common/types/auth-user.type';
 import { LoginDto } from './dto/login.dto';
 
-const DEV_PROFILES: Record<
-  string,
-  { id: string; email: string; fullName: string; role: AuthUser['role'] }
-> = {
-  'admin@copigrafica.dev': {
-    id: 'dev-admin-id',
-    email: 'admin@copigrafica.dev',
-    fullName: 'Administrador DEV',
-    role: 'ADMIN',
-  },
-  'facturador@copigrafica.dev': {
-    id: 'dev-facturador-id',
-    email: 'facturador@copigrafica.dev',
-    fullName: 'Facturador DEV',
-    role: 'FACTURADOR',
-  },
-  'consulta@copigrafica.dev': {
-    id: 'dev-consulta-id',
-    email: 'consulta@copigrafica.dev',
-    fullName: 'Consulta DEV',
-    role: 'CONSULTA',
-  },
-};
-
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
     private readonly auditService: AuditService,
   ) {}
 
   async login(dto: LoginDto): Promise<{ accessToken: string; user: AuthUser }> {
     const email = dto.email.toLowerCase().trim();
-    let profile: {
-      id: string;
-      email: string;
-      role: AuthUser['role'];
-      fullName: string;
-      isActive: boolean;
-    } | null = null;
-
-    try {
-      profile = await this.prisma.profile.findUnique({
-        where: { email },
-      });
-    } catch {
-      profile = DEV_PROFILES[email]
-        ? { ...DEV_PROFILES[email], isActive: true }
-        : null;
-    }
-
-    if (!profile && DEV_PROFILES[email]) {
-      profile = { ...DEV_PROFILES[email], isActive: true };
-    }
+    const profile = await this.prisma.profile.findUnique({
+      where: { email },
+    });
 
     if (!profile || !profile.isActive) {
       throw new UnauthorizedException('Credenciales inválidas.');
     }
 
-    const isValidPassword = this.validateDevPassword(dto.email, dto.password);
+    const isValidPassword = await this.validatePassword(
+      dto.password,
+      profile.passwordHash,
+    );
     if (!isValidPassword) {
       throw new UnauthorizedException('Credenciales inválidas.');
     }
@@ -102,41 +62,31 @@ export class AuthService {
     return { accessToken, user };
   }
 
-  validateDevPassword(email: string, password: string): boolean {
-    const devUsersJson = this.configService.get<string>('DEV_USERS');
-    if (devUsersJson) {
-      try {
-        const devUsers = JSON.parse(devUsersJson) as Record<string, string>;
-        const normalizedEmail = email.toLowerCase().trim();
-        if (devUsers[normalizedEmail] !== undefined) {
-          return devUsers[normalizedEmail] === password;
-        }
-      } catch {
-        // fall through to default dev password
-      }
+  private async validatePassword(
+    password: string,
+    hash: string | null,
+  ): Promise<boolean> {
+    if (!hash) {
+      return false;
     }
+    try {
+      return await bcrypt.compare(password, hash);
+    } catch {
+      return false;
+    }
+  }
 
-    const defaultPassword =
-      this.configService.get<string>('DEV_PASSWORD') ?? 'Admin123!';
-    return password === defaultPassword;
+  async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, 10);
   }
 
   async validateUser(userId: string): Promise<AuthUser | null> {
-    try {
-      const profile = await this.prisma.profile.findUnique({
-        where: { id: userId },
-      });
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: userId },
+    });
 
-      if (profile && profile.isActive) {
-        return this.toAuthUser(profile);
-      }
-    } catch {
-      // fallback for dev mode
-    }
-
-    const devProfile = Object.values(DEV_PROFILES).find((p) => p.id === userId);
-    if (devProfile) {
-      return devProfile;
+    if (profile && profile.isActive) {
+      return this.toAuthUser(profile);
     }
 
     return null;

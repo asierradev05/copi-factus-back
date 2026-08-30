@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class FilterCustomerDto {
   @IsOptional()
@@ -21,5 +21,6 @@ export class FilterCustomerDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }

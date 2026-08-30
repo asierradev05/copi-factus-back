@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, Prisma, PurchaseOrderStatus } from '@prisma/client';
+import {
+  AuditAction,
+  DeliveryOrderStatus,
+  Prisma,
+  PurchaseOrderStatus,
+} from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { nextDocumentNumber } from '../common/utils/document-sequence.util';
@@ -39,7 +44,12 @@ export class PurchaseOrdersService {
     const [data, total] = await Promise.all([
       this.prisma.purchaseOrder.findMany({
         where,
-        include: { customer: true, invoice: true },
+        include: {
+          customer: true,
+          invoice: true,
+          quote: true,
+          deliveryOrders: true,
+        },
         orderBy: { issueDate: 'desc' },
         skip,
         take: limit,
@@ -56,7 +66,12 @@ export class PurchaseOrdersService {
   async findOne(id: string) {
     const po = await this.prisma.purchaseOrder.findUnique({
       where: { id },
-      include: { customer: true, invoice: true },
+      include: {
+        customer: true,
+        invoice: true,
+        quote: true,
+        deliveryOrders: true,
+      },
     });
     if (!po) {
       throw new NotFoundException('La orden de compra no fue encontrada.');
@@ -92,6 +107,7 @@ export class PurchaseOrdersService {
         issueDate: dto.issueDate ? new Date(dto.issueDate) : new Date(),
         expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : null,
         invoiceId: dto.invoiceId,
+        quoteId: dto.quoteId,
         items,
         subtotal,
         discountTotal,
@@ -100,7 +116,12 @@ export class PurchaseOrdersService {
         notes: dto.notes?.trim(),
         createdById: userId,
       },
-      include: { customer: true, invoice: true },
+      include: {
+        customer: true,
+        invoice: true,
+        quote: true,
+        deliveryOrders: true,
+      },
     });
 
     await this.audit
@@ -130,7 +151,12 @@ export class PurchaseOrdersService {
     const po = await this.prisma.purchaseOrder.update({
       where: { id },
       data: { status: dto.status },
-      include: { customer: true, invoice: true },
+      include: {
+        customer: true,
+        invoice: true,
+        quote: true,
+        deliveryOrders: true,
+      },
     });
 
     await this.audit
@@ -148,6 +174,57 @@ export class PurchaseOrdersService {
       .catch(() => {});
 
     return po;
+  }
+
+  async convertToDeliveryOrder(id: string, userId: string) {
+    const po = await this.findOne(id);
+
+    if (po.status === PurchaseOrderStatus.CANCELADA) {
+      throw new BadRequestException(
+        'No se puede crear una orden de entrega a partir de una orden de compra cancelada.',
+      );
+    }
+
+    const items = po.items as Prisma.InputJsonValue as Array<{
+      description: string;
+      quantity: number;
+      unitPrice?: number;
+    }>;
+
+    const doNumber = await this.prisma.$transaction((tx) =>
+      nextDocumentNumber(tx, 'delivery-order', 'ENT'),
+    );
+
+    const doo = await this.prisma.deliveryOrder.create({
+      data: {
+        doNumber,
+        customerId: po.customerId,
+        invoiceId: po.invoiceId,
+        purchaseOrderId: po.id,
+        scheduledAt: po.expectedDate ?? new Date(),
+        items: items.map((item) => ({
+          description: item.description,
+          quantity: Number(item.quantity.toFixed(2)),
+          unitPrice: item.unitPrice ? Number(item.unitPrice.toFixed(2)) : 0,
+        })),
+        notes: po.notes,
+        status: DeliveryOrderStatus.PENDIENTE,
+        createdById: userId,
+      },
+      include: { customer: true, invoice: true, purchaseOrder: true },
+    });
+
+    await this.audit
+      .log({
+        userId,
+        action: AuditAction.CREATE,
+        entityType: 'DeliveryOrder',
+        entityId: doo.id,
+        newValue: { doNumber, source: 'PurchaseOrder', poNumber: po.poNumber },
+      })
+      .catch(() => {});
+
+    return doo;
   }
 
   private computeItems(items: CreatePurchaseOrderDto['items']) {

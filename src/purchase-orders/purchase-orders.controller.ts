@@ -53,4 +53,13 @@ export class PurchaseOrdersController {
   ) {
     return this.purchaseOrders.updateStatus(id, dto, user.id);
   }
+
+  @Post(':id/delivery-order')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  convertToDeliveryOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.purchaseOrders.convertToDeliveryOrder(id, user.id);
+  }
 }

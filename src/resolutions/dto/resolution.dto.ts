@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { Ambient, ResolutionType } from '@prisma/client';
@@ -119,5 +120,6 @@ export class FilterResolutionDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }

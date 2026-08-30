@@ -102,11 +102,12 @@ enum Ambient {
 
 model Profile {
   id        String   @id @default(uuid())
-  authId    String?  @unique @map("auth_id")
-  email     String   @unique
-  fullName  String   @map("full_name")
-  role      UserRole @default(FACTURADOR)
-  isActive  Boolean  @default(true) @map("is_active")
+  authId       String?  @unique @map("auth_id")
+  email        String   @unique
+  fullName     String   @map("full_name")
+  role         UserRole @default(FACTURADOR)
+  isActive     Boolean  @default(true) @map("is_active")
+  passwordHash String?  @map("password_hash")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -443,6 +444,7 @@ model Quote {
 
   customer  Customer @relation(fields: [customerId], references: [id])
   createdBy Profile? @relation("QuoteCreator", fields: [createdById], references: [id])
+  purchaseOrders PurchaseOrder[]
 
   @@index([customerId])
   @@index([status])
@@ -463,6 +465,7 @@ model PurchaseOrder {
   total       Decimal             @default(0) @db.Decimal(12, 2)
   status      PurchaseOrderStatus @default(SOLICITADA)
   invoiceId   String?             @map("invoice_id")
+  quoteId     String?             @map("quote_id")
   notes       String?
   createdById String?             @map("created_by")
   createdAt   DateTime            @default(now()) @map("created_at")
@@ -470,7 +473,9 @@ model PurchaseOrder {
 
   customer  Customer @relation(fields: [customerId], references: [id])
   invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  quote     Quote?   @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   createdBy Profile? @relation("PurchaseOrderCreator", fields: [createdById], references: [id])
+  deliveryOrders DeliveryOrder[]
 
   @@index([customerId])
   @@index([status])
@@ -483,6 +488,7 @@ model DeliveryOrder {
   doNumber    String              @unique @map("do_number")
   customerId  String              @map("customer_id")
   invoiceId   String?             @map("invoice_id")
+  purchaseOrderId String?         @map("purchase_order_id")
   scheduledAt DateTime?           @map("scheduled_at")
   deliveredAt DateTime?           @map("delivered_at")
   items       Json
@@ -492,9 +498,10 @@ model DeliveryOrder {
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  customer  Customer @relation(fields: [customerId], references: [id])
-  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  createdBy Profile? @relation("DeliveryOrderCreator", fields: [createdById], references: [id])
+  customer  Customer        @relation(fields: [customerId], references: [id])
+  invoice   Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  createdBy Profile?        @relation("DeliveryOrderCreator", fields: [createdById], references: [id])
 
   @@index([customerId])
   @@index([status])

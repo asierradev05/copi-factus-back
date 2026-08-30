@@ -13,13 +13,21 @@ import { JwtStrategy } from './jwt.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') ?? 'dev-jwt-secret',
-        signOptions: {
-          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
-            '8h') as `${number}${'s' | 'm' | 'h' | 'd'}`,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret || secret === 'dev-jwt-secret' || secret.length < 16) {
+          throw new Error(
+            'JWT_SECRET no configurado correctamente. Usa un secreto fuerte (>= 16 caracteres).',
+          );
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
+              '8h') as `${number}${'s' | 'm' | 'h' | 'd'}`,
+          },
+        };
+      },
     }),
     AuditModule,
   ],

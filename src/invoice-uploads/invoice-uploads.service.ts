@@ -69,7 +69,10 @@ export class InvoiceUploadsService {
     if (!file) {
       throw new BadRequestException('Debe adjuntar un archivo PDF.');
     }
-    if (file.mimetype !== 'application/pdf' && !file.originalname.toLowerCase().endsWith('.pdf')) {
+    if (
+      file.mimetype !== 'application/pdf' &&
+      !file.originalname.toLowerCase().endsWith('.pdf')
+    ) {
       throw new BadRequestException('Solo se admiten archivos PDF.');
     }
 
@@ -122,11 +125,19 @@ export class InvoiceUploadsService {
     fileName: string;
     fileSize: number;
   }): Buffer {
-    const filePath = path.join(process.cwd(), upload.filePath);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException('El archivo de la factura no fue encontrado.');
+    const uploadsResolved = path.resolve(UPLOADS_DIR);
+    const resolved = path.resolve(process.cwd(), upload.filePath);
+    if (resolved !== uploadsResolved && !resolved.startsWith(uploadsResolved + path.sep)) {
+      throw new NotFoundException(
+        'El archivo de la factura no fue encontrado.',
+      );
     }
-    return fs.readFileSync(filePath);
+    if (!fs.existsSync(resolved)) {
+      throw new NotFoundException(
+        'El archivo de la factura no fue encontrado.',
+      );
+    }
+    return fs.readFileSync(resolved);
   }
 
   private async extractFromPdf(buffer: Buffer): Promise<ExtractedInvoiceData> {

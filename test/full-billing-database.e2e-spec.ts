@@ -3,7 +3,12 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
-import { DocumentType, InvoiceStatus, PaymentMethod, ServiceStatus } from '@prisma/client';
+import {
+  DocumentType,
+  InvoiceStatus,
+  PaymentMethod,
+  ServiceStatus,
+} from '@prisma/client';
 
 describe('Full Billing & Database Integrity E2E Test', () => {
   let app: INestApplication;
@@ -43,21 +48,35 @@ describe('Full Billing & Database Integrity E2E Test', () => {
   afterAll(async () => {
     try {
       if (testPaymentId) {
-        await prisma.payment.delete({ where: { id: testPaymentId } }).catch(() => {});
+        await prisma.payment
+          .delete({ where: { id: testPaymentId } })
+          .catch(() => {});
       }
       if (testInvoiceId) {
-        await prisma.serviceInvoiceLink.deleteMany({ where: { invoiceId: testInvoiceId } }).catch(() => {});
-        await prisma.invoiceItem.deleteMany({ where: { invoiceId: testInvoiceId } }).catch(() => {});
-        await prisma.invoice.delete({ where: { id: testInvoiceId } }).catch(() => {});
+        await prisma.serviceInvoiceLink
+          .deleteMany({ where: { invoiceId: testInvoiceId } })
+          .catch(() => {});
+        await prisma.invoiceItem
+          .deleteMany({ where: { invoiceId: testInvoiceId } })
+          .catch(() => {});
+        await prisma.invoice
+          .delete({ where: { id: testInvoiceId } })
+          .catch(() => {});
       }
       if (testServiceId) {
-        await prisma.service.delete({ where: { id: testServiceId } }).catch(() => {});
+        await prisma.service
+          .delete({ where: { id: testServiceId } })
+          .catch(() => {});
       }
       if (testCustomerId) {
-        await prisma.customer.delete({ where: { id: testCustomerId } }).catch(() => {});
+        await prisma.customer
+          .delete({ where: { id: testCustomerId } })
+          .catch(() => {});
       }
       if (testServiceTypeId) {
-        await prisma.serviceType.delete({ where: { id: testServiceTypeId } }).catch(() => {});
+        await prisma.serviceType
+          .delete({ where: { id: testServiceTypeId } })
+          .catch(() => {});
       }
     } catch {}
     await app.close();
@@ -109,7 +128,9 @@ describe('Full Billing & Database Integrity E2E Test', () => {
       if (dbCustomer) {
         expect(dbCustomer.name).toBe(customerPayload.name);
         expect(dbCustomer.documentNumber).toBe(testCustomerDocument);
-        console.log('✅ PASO 2 completado: Cliente creado y verificado directamente en la Base de Datos.');
+        console.log(
+          '✅ PASO 2 completado: Cliente creado y verificado directamente en la Base de Datos.',
+        );
       }
     } catch {
       console.log('✅ PASO 2 completado: Cliente creado correctamente en API.');
@@ -123,7 +144,11 @@ describe('Full Billing & Database Integrity E2E Test', () => {
       .set('Authorization', `Bearer ${authToken}`);
 
     let serviceTypeId: string;
-    if (typesRes.body && Array.isArray(typesRes.body) && typesRes.body.length > 0) {
+    if (
+      typesRes.body &&
+      Array.isArray(typesRes.body) &&
+      typesRes.body.length > 0
+    ) {
       serviceTypeId = typesRes.body[0].id;
     } else {
       const createTypeRes = await request(app.getHttpServer())
@@ -169,7 +194,9 @@ describe('Full Billing & Database Integrity E2E Test', () => {
       });
       if (dbService) {
         expect(dbService.status).toBe(ServiceStatus.SOLICITADO);
-        console.log('✅ PASO 3 completado: Servicio registrado y verificado en la Base de Datos.');
+        console.log(
+          '✅ PASO 3 completado: Servicio registrado y verificado en la Base de Datos.',
+        );
       }
     } catch {
       console.log('✅ PASO 3 completado: Servicio registrado correctamente.');
@@ -186,10 +213,14 @@ describe('Full Billing & Database Integrity E2E Test', () => {
     expect(response.body.status).toBe(ServiceStatus.TERMINADO);
 
     try {
-      const dbService = await prisma.service.findUnique({ where: { id: testServiceId } });
+      const dbService = await prisma.service.findUnique({
+        where: { id: testServiceId },
+      });
       if (dbService) {
         expect(dbService.status).toBe(ServiceStatus.TERMINADO);
-        console.log('✅ PASO 4 completado: Estado de servicio actualizado a TERMINADO en Base de Datos.');
+        console.log(
+          '✅ PASO 4 completado: Estado de servicio actualizado a TERMINADO en Base de Datos.',
+        );
       }
     } catch {
       console.log('✅ PASO 4 completado: Servicio marcado como TERMINADO.');
@@ -210,12 +241,16 @@ describe('Full Billing & Database Integrity E2E Test', () => {
     testInvoiceId = response.body.id;
 
     try {
-      const dbInvoice = await prisma.invoice.findUnique({ where: { id: testInvoiceId } });
+      const dbInvoice = await prisma.invoice.findUnique({
+        where: { id: testInvoiceId },
+      });
       if (dbInvoice) {
         expect(dbInvoice.status).toBe(InvoiceStatus.EMITIDA);
         expect(Number(dbInvoice.paidAmount)).toBe(0);
       }
-      console.log('✅ PASO 5 completado: Factura emitida y relación Servicio->Factura verificada.');
+      console.log(
+        '✅ PASO 5 completado: Factura emitida y relación Servicio->Factura verificada.',
+      );
     } catch {
       console.log('✅ PASO 5 completado: Factura generada correctamente.');
     }
@@ -246,17 +281,25 @@ describe('Full Billing & Database Integrity E2E Test', () => {
       .expect(201);
 
     expect(response.body).toHaveProperty('payment');
-    expect(response.body.updatedInvoice.status).toBe(InvoiceStatus.PARCIALMENTE_PAGADA);
+    expect(response.body.updatedInvoice.status).toBe(
+      InvoiceStatus.PARCIALMENTE_PAGADA,
+    );
     testPaymentId = response.body.payment.id;
 
     try {
-      const dbPayment = await prisma.payment.findUnique({ where: { id: testPaymentId } });
+      const dbPayment = await prisma.payment.findUnique({
+        where: { id: testPaymentId },
+      });
       if (dbPayment) {
         expect(Number(dbPayment.amount)).toBe(partialAmount);
       }
-      console.log('✅ PASO 6 completado: Pago parcial registrado y verificado en BD.');
+      console.log(
+        '✅ PASO 6 completado: Pago parcial registrado y verificado en BD.',
+      );
     } catch {
-      console.log('✅ PASO 6 completado: Pago parcial registrado correctamente.');
+      console.log(
+        '✅ PASO 6 completado: Pago parcial registrado correctamente.',
+      );
     }
   });
 
@@ -281,7 +324,9 @@ describe('Full Billing & Database Integrity E2E Test', () => {
       })
       .expect(400);
 
-    console.log('✅ PASO 7 completado: Regla de integridad financiera impidió sobrepago.');
+    console.log(
+      '✅ PASO 7 completado: Regla de integridad financiera impidió sobrepago.',
+    );
   });
 
   it('PASO 8: Registro de Pago Final - Liquidar saldo y verificar estado PAGADA en BD', async () => {
@@ -309,12 +354,16 @@ describe('Full Billing & Database Integrity E2E Test', () => {
     expect(Number(response.body.updatedInvoice.balance)).toBe(0);
 
     try {
-      const dbInvoice = await prisma.invoice.findUnique({ where: { id: testInvoiceId } });
+      const dbInvoice = await prisma.invoice.findUnique({
+        where: { id: testInvoiceId },
+      });
       if (dbInvoice) {
         expect(dbInvoice.status).toBe(InvoiceStatus.PAGADA);
         expect(Number(dbInvoice.balance)).toBe(0);
       }
-      console.log('✅ PASO 8 completado: Factura completamente pagada y balance $0 verificado en BD.');
+      console.log(
+        '✅ PASO 8 completado: Factura completamente pagada y balance $0 verificado en BD.',
+      );
     } catch {
       console.log('✅ PASO 8 completado: Factura liquidada correctamente.');
     }
@@ -329,6 +378,8 @@ describe('Full Billing & Database Integrity E2E Test', () => {
     expect(response.body).toHaveProperty('summary');
     expect(Number(response.body.summary.balance)).toBe(0);
 
-    console.log('✅ PASO 9 completado: Estado de cuenta del cliente generado y verificado.');
+    console.log(
+      '✅ PASO 9 completado: Estado de cuenta del cliente generado y verificado.',
+    );
   });
 });

@@ -53,4 +53,10 @@ export class DeliveryOrdersController {
   ) {
     return this.deliveryOrders.updateStatus(id, dto, user.id);
   }
+
+  @Post(':id/invoice')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  convertToInvoice(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.deliveryOrders.convertToInvoice(id, user.id);
+  }
 }

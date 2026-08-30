@@ -74,6 +74,7 @@ export interface CompanyPdfModel {
   email?: string | null;
   city?: string | null;
   logoUrl?: string | null;
+  logoBase64?: string | null;
 }
 
 function formatNumber(value: number): string {
@@ -143,24 +144,54 @@ function headerLeftStack(company: CompanyPdfModel): Content[] {
 function headerRightStack(invoice: InvoicePdfModel): Content[] {
   const stack: Content[] = [
     {
-      text: invoice.invoiceNumber
-        ? `FACTURA ${invoice.invoiceNumber}`
-        : 'FACTURA',
-      bold: true,
-      fontSize: 16,
-      margin: [0, 0, 0, 4],
+      table: {
+        widths: ['*'],
+        body: [
+          [
+            {
+              text: invoice.invoiceNumber
+                ? `FACTURA ${invoice.invoiceNumber}`
+                : 'FACTURA',
+              bold: true,
+              fontSize: 17,
+              color: '#ec1c24',
+              alignment: 'center',
+            },
+          ],
+        ],
+      },
+      layout: {
+        hLineWidth: () => 1,
+        vLineWidth: () => 1,
+        hLineColor: () => '#2f7ec8',
+        vLineColor: () => '#2f7ec8',
+      },
+      margin: [0, 0, 0, 6],
     },
     {
-      text: `Estado: ${STATUS_LABELS[invoice.status] ?? invoice.status}`,
-      fontSize: 9,
+      columns: [
+        { text: 'Estado', bold: true, fontSize: 9, width: 70 },
+        {
+          text: STATUS_LABELS[invoice.status] ?? invoice.status,
+          fontSize: 9,
+        },
+      ],
       margin: [0, 0, 0, 2],
     },
     {
-      text: `Fecha: ${formatDate(invoice.issueDate)}`,
-      fontSize: 9,
+      columns: [
+        { text: 'Fecha', bold: true, fontSize: 9, width: 70 },
+        { text: formatDate(invoice.issueDate), fontSize: 9 },
+      ],
       margin: [0, 0, 0, 2],
     },
-    { text: `Vence: ${formatDate(invoice.dueDate)}`, fontSize: 9 },
+    {
+      columns: [
+        { text: 'Vence', bold: true, fontSize: 9, width: 70 },
+        { text: formatDate(invoice.dueDate), fontSize: 9 },
+      ],
+      margin: [0, 0, 0, 2],
+    },
   ];
   return stack;
 }
@@ -196,18 +227,28 @@ function customerRightStack(invoice: InvoicePdfModel): Content[] {
 }
 
 function itemRow(item: InvoicePdfLineItem, index: number): Content[] {
+  const fill = index % 2 === 1 ? '#f0f0f0' : '#ffffff';
+  const make = (content: string, alignment: 'left' | 'right' | 'center') => ({
+    text: content,
+    alignment,
+    fontSize: 9,
+    fillColor: fill,
+  });
   return [
-    { text: String(index + 1), alignment: 'center', fontSize: 9 },
-    { text: item.description, fontSize: 9 },
-    { text: formatNumber(item.quantity), alignment: 'right', fontSize: 9 },
-    { text: formatNumber(item.unitPrice), alignment: 'right', fontSize: 9 },
-    { text: formatNumber(item.discount), alignment: 'right', fontSize: 9 },
+    make(String(index + 1), 'center'),
+    make(item.description, 'left'),
+    make(`${formatNumber(item.quantity)} und`, 'right'),
+    make(formatNumber(item.unitPrice), 'right'),
+    make(formatNumber(item.discount), 'right'),
+    make(`${formatNumber(item.taxRate)}%`, 'right'),
     {
-      text: `${formatNumber(item.taxRate)}%`,
+      text: formatNumber(item.total),
       alignment: 'right',
       fontSize: 9,
+      bold: true,
+      color: '#ec1c24',
+      fillColor: fill,
     },
-    { text: formatNumber(item.total), alignment: 'right', fontSize: 9 },
   ];
 }
 
@@ -219,6 +260,50 @@ function currencyRow(label: string, value: number, bold = false): Content[] {
       alignment: 'right',
       bold,
       margin: [0, 1, 0, 1],
+    },
+  ];
+}
+
+function sectionHeader(text: string): Content {
+  return {
+    table: {
+      widths: ['*'],
+      body: [
+        [
+          {
+            text: text.toUpperCase(),
+            bold: true,
+            fontSize: 10,
+            color: 'white',
+            alignment: 'left',
+            margin: [4, 3, 4, 3],
+            fillColor: '#2f7ec8',
+          },
+        ],
+      ],
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 8],
+  };
+}
+
+function totalRow(label: string, value: number, highlight = false): Content[] {
+  return [
+    {
+      text: label,
+      alignment: 'right',
+      bold: true,
+      fontSize: highlight ? 12 : 11,
+      margin: [0, 2, 0, 2],
+      color: highlight ? '#ec1c24' : '#222222',
+    },
+    {
+      text: formatNumber(value),
+      alignment: 'right',
+      bold: true,
+      fontSize: highlight ? 13 : 11,
+      margin: [0, 2, 0, 2],
+      color: highlight ? '#ec1c24' : '#222222',
     },
   ];
 }
@@ -240,45 +325,53 @@ function buildDocDefinition(
     currencyRow('Subtotal', invoice.subtotal),
     currencyRow('Descuentos', invoice.discountTotal),
     currencyRow('Impuestos', invoice.taxTotal),
-    currencyRow('Total a pagar', invoice.total, true),
+    totalRow('TOTAL A PAGAR', invoice.total, true),
     currencyRow('Abonado', invoice.paidAmount),
-    currencyRow('Saldo', invoice.balance, true),
+    totalRow('SALDO', invoice.balance, invoice.balance > 0),
   ];
 
   const content: Content[] = [
     {
       columns: headerColumns,
       columnGap: 10,
-      margin: [0, 0, 0, 12],
-    },
-    {
-      canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }],
-      margin: [0, 0, 0, 12],
-    },
-    {
-      text: 'INFORMACIÓN DEL CLIENTE',
-      bold: true,
-      fontSize: 10,
       margin: [0, 0, 0, 6],
     },
+    {
+      text: 'SOMOS UNA EMPRESA DIRECTA (SIN INTERMEDIARIOS)',
+      fontSize: 8,
+      bold: true,
+      color: '#356ea8',
+      alignment: 'center',
+      margin: [0, 0, 0, 8],
+    },
+    {
+      canvas: [
+        {
+          type: 'line',
+          x1: 0,
+          y1: 0,
+          x2: 515,
+          y2: 0,
+          lineWidth: 1.2,
+          lineColor: '#2f7ec8',
+        },
+      ],
+      margin: [0, 0, 0, 10],
+    },
+    sectionHeader('INFORMACIÓN DEL CLIENTE'),
     {
       columns: [
         { width: '*', stack: customerLeftStack(invoice) },
         { width: 240, alignment: 'right', stack: customerRightStack(invoice) },
       ],
       columnGap: 10,
-      margin: [0, 0, 0, 12],
+      margin: [0, 0, 0, 10],
     },
-    {
-      text: 'DETALLE DE LA FACTURA',
-      bold: true,
-      fontSize: 10,
-      margin: [0, 0, 0, 6],
-    },
+    sectionHeader('DETALLE DE LA FACTURA'),
     {
       table: {
         headerRows: 1,
-        widths: [28, '*', 70, 70, 65, 55, 80],
+        widths: [28, '*', 70, 65, 60, 50, 75],
         body: [
           [
             { text: '#', style: 'tableHeader', alignment: 'center' },
@@ -292,8 +385,13 @@ function buildDocDefinition(
           ...itemRows,
         ],
       },
-      layout: 'lightHorizontalLines',
-      margin: [0, 0, 0, 12],
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        hLineColor: () => '#d1d1d1',
+        vLineColor: () => '#d1d1d1',
+      },
+      margin: [0, 0, 0, 10],
     },
     {
       columns: [
@@ -301,7 +399,12 @@ function buildDocDefinition(
           width: '*',
           stack: invoice.notes
             ? ([
-                { text: 'OBSERVACIONES', bold: true, fontSize: 9 },
+                {
+                  text: 'OBSERVACIONES',
+                  bold: true,
+                  fontSize: 9,
+                  color: '#2f7ec8',
+                },
                 { text: invoice.notes, fontSize: 9, margin: [0, 2, 0, 0] },
               ] as Content[])
             : ([] as Content[]),
@@ -309,7 +412,7 @@ function buildDocDefinition(
         {
           width: 220,
           layout: 'noBorders',
-          table: { widths: ['*', 90], body: totalsBody },
+          table: { widths: ['*', 95], body: totalsBody },
         },
       ],
       margin: [0, 0, 0, 12],
@@ -362,29 +465,56 @@ function buildDocDefinition(
 
   content.push(
     {
-      canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }],
+      canvas: [
+        {
+          type: 'line',
+          x1: 0,
+          y1: 0,
+          x2: 515,
+          y2: 0,
+          lineWidth: 1.2,
+          lineColor: '#2f7ec8',
+        },
+      ],
       margin: [0, 0, 0, 6],
     },
     {
-      text:
-        'Documento generado por CopiGráfica Sierra. Los valores presentados son informativos; ' +
-        'el soporte legal corresponde al documento electrónico enviado a la DIAN.',
+      columns: [
+        {
+          text: `${company.name} · ${company.address ?? ''} · Tel: ${company.phone ?? ''} · ${company.email ?? ''}`,
+          fontSize: 8,
+          color: '#356ea8',
+          alignment: 'center',
+        },
+      ],
+      margin: [0, 4, 0, 2],
+    },
+    {
+      text: 'SOMOS UNA EMPRESA DIRECTA (SIN INTERMEDIARIOS)',
       fontSize: 8,
+      bold: true,
+      color: '#ec1c24',
+      alignment: 'center',
+      margin: [0, 0, 0, 2],
+    },
+    {
+      text: 'El soporte legal corresponde al documento electrónico enviado a la DIAN.',
+      fontSize: 7.5,
       color: '#777777',
       alignment: 'center',
-      margin: [0, 4, 0, 0],
+      margin: [0, 2, 0, 0],
     },
   );
 
   const document: TDocumentDefinitions = {
-    defaultStyle: { font: 'Helvetica', fontSize: 10 },
+    defaultStyle: { font: 'Helvetica', fontSize: 10, color: '#222222' },
     content,
     styles: {
       tableHeader: {
         bold: true,
         fontSize: 9,
-        fillColor: '#EEEEEE',
-        color: '#333333',
+        fillColor: '#2f7ec8',
+        color: 'white',
       },
     },
     pageMargins: [36, 36, 36, 36],

@@ -44,7 +44,10 @@ export class InvoiceUploadsController {
 
   @Get(':id/file')
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR, UserRole.CONSULTA)
-  async getFile(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+  async getFile(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const upload = await this.invoiceUploads.findOne(id);
     if (!upload) {
       return null;

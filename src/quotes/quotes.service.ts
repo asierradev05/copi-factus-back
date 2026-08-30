@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, Prisma, QuoteStatus } from '@prisma/client';
+import {
+  AuditAction,
+  Prisma,
+  PurchaseOrderStatus,
+  QuoteStatus,
+} from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { nextDocumentNumber } from '../common/utils/document-sequence.util';
@@ -39,7 +44,7 @@ export class QuotesService {
     const [data, total] = await Promise.all([
       this.prisma.quote.findMany({
         where,
-        include: { customer: true },
+        include: { customer: true, purchaseOrders: true },
         orderBy: { issueDate: 'desc' },
         skip,
         take: limit,
@@ -56,7 +61,7 @@ export class QuotesService {
   async findOne(id: string) {
     const quote = await this.prisma.quote.findUnique({
       where: { id },
-      include: { customer: true },
+      include: { customer: true, purchaseOrders: true },
     });
     if (!quote) {
       throw new NotFoundException('La cotización no fue encontrada.');
@@ -146,6 +151,66 @@ export class QuotesService {
       .catch(() => {});
 
     return quote;
+  }
+
+  async convertToPurchaseOrder(id: string, userId: string) {
+    const quote = await this.findOne(id);
+
+    if (quote.status === QuoteStatus.RECHAZADA) {
+      throw new BadRequestException(
+        'No se puede crear una orden de compra a partir de una cotización rechazada.',
+      );
+    }
+    if (quote.status === QuoteStatus.FACTURADA) {
+      throw new BadRequestException('Esta cotización ya fue facturada.');
+    }
+
+    const items = quote.items as Prisma.InputJsonValue as Array<{
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      discount?: number;
+      taxRate?: number;
+    }>;
+
+    const poNumber = await this.prisma.$transaction((tx) =>
+      nextDocumentNumber(tx, 'purchase-order', 'OC'),
+    );
+
+    const po = await this.prisma.purchaseOrder.create({
+      data: {
+        poNumber,
+        customerId: quote.customerId,
+        issueDate: new Date(),
+        quoteId: quote.id,
+        items: items,
+        subtotal: quote.subtotal,
+        discountTotal: quote.discountTotal,
+        taxTotal: quote.taxTotal,
+        total: quote.total,
+        notes: quote.notes,
+        status: PurchaseOrderStatus.SOLICITADA,
+        createdById: userId,
+      },
+      include: { customer: true, invoice: true, quote: true },
+    });
+
+    await this.prisma.quote.update({
+      where: { id: quote.id },
+      data: { status: QuoteStatus.APROBADA },
+    });
+
+    await this.audit
+      .log({
+        userId,
+        action: AuditAction.CREATE,
+        entityType: 'PurchaseOrder',
+        entityId: po.id,
+        newValue: { poNumber, source: 'Quote', quoteNumber: quote.quoteNumber },
+      })
+      .catch(() => {});
+
+    return po;
   }
 
   private computeItems(items: CreateQuoteDto['items']) {

@@ -28,6 +28,7 @@ import {
   toDecimal,
 } from '../common/utils/money.util';
 import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
 import {
   CreateInvoiceDto,
   FilterInvoiceDto,
@@ -95,7 +96,9 @@ export class InvoicesService {
         data,
         meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       };
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+
       let filtered = globalStore.invoices;
       if (filters.customerId) {
         filtered = filtered.filter((i) => i.customerId === filters.customerId);
@@ -150,7 +153,9 @@ export class InvoicesService {
       if (invoice) {
         return this.syncOverdueStatus(invoice);
       }
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
     const memInvoice = globalStore.invoices.find((i) => i.id === id);
     if (!memInvoice) {
@@ -213,7 +218,9 @@ export class InvoicesService {
         .catch(() => {});
 
       return invoice;
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+
       const invId = randomUUID();
       const totalNum = Number(totals.total);
 
@@ -331,6 +338,7 @@ export class InvoicesService {
       return invoice;
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
+      if (!useInMemoryFallback()) throw err;
 
       const nextNum = globalStore.companySettings.invoiceNextNumber++;
       existing.invoiceNumber = `${globalStore.companySettings.invoicePrefix}-${String(nextNum).padStart(6, '0')}`;
@@ -374,7 +382,9 @@ export class InvoicesService {
       });
 
       return invoice;
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+
       existing.status = InvoiceStatus.CANCELADA;
       existing.cancelledAt = new Date();
       existing.balance = 0;
@@ -430,14 +440,21 @@ export class InvoicesService {
     );
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
+    const esc = (v: string | null | undefined) =>
+      (v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     const html = `
       <div style="font-family:Arial, sans-serif; color:#222;">
-        <h2>${company.name}</h2>
-        <p>Cordial saludo${customer ? `, <b>${customer.name}</b>` : ''}.</p>
-        <p>Adjuntamos la factura de venta <b>${invoice.invoiceNumber}</b>
+        <h2>${esc(company.name)}</h2>
+        <p>Cordial saludo${customer ? `, <b>${esc(customer.name)}</b>` : ''}.</p>
+        <p>Adjuntamos la factura de venta <b>${esc(invoice.invoiceNumber)}</b>
         por un total de <b>${Number(invoice.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</b>.</p>
-        <p>Puede consultarla en línea: <a href="${frontendUrl}/invoices/${id}">Ver factura</a></p>
-        <p style="color:#888; font-size:12px;">Este mensaje fue generado automáticamente por ${company.name}.</p>
+        <p>Puede consultarla en línea: <a href="${esc(frontendUrl)}/invoices/${id}">Ver factura</a></p>
+        <p style="color:#888; font-size:12px;">Este mensaje fue generado automáticamente por ${esc(company.name)}.</p>
       </div>
     `;
 
@@ -539,7 +556,9 @@ export class InvoicesService {
           logoUrl: settings.logoUrl,
         };
       }
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
     const settings = globalStore.companySettings;
     return {
@@ -582,7 +601,9 @@ export class InvoicesService {
           include: { items: true, customer: true, payments: true },
         });
       }
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
     const memInvoice = globalStore.invoices.find((i) => i.id === invoiceId);
     if (!memInvoice) {

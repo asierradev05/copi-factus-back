@@ -140,11 +140,7 @@ export class RecurringServicesService {
     return this.findOne(service.id);
   }
 
-  async update(
-    id: string,
-    dto: UpdateRecurringServiceDto,
-    userId: string,
-  ) {
+  async update(id: string, dto: UpdateRecurringServiceDto, userId: string) {
     await this.findOne(id);
     if (dto.categoryId || dto.subcategoryId) {
       await this.validateReferences(
@@ -161,7 +157,9 @@ export class RecurringServicesService {
           : {}),
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.provider !== undefined ? { provider: dto.provider } : {}),
-        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description }
+          : {}),
         ...(dto.amount !== undefined
           ? { amount: new Prisma.Decimal(dto.amount) }
           : {}),
@@ -252,7 +250,9 @@ export class RecurringServicesService {
       total,
       paid,
       active,
-      monthlyTotal: (totalMonthly._sum.amount ?? new Prisma.Decimal(0)).toNumber(),
+      monthlyTotal: (
+        totalMonthly._sum.amount ?? new Prisma.Decimal(0)
+      ).toNumber(),
     };
   }
 

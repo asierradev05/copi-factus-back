@@ -149,5 +149,6 @@ export class FilterRecurringServiceDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }

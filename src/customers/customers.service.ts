@@ -8,6 +8,7 @@ import { AuditAction, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { globalStore } from '../database/in-memory-store';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { FilterCustomerDto } from './dto/filter-customer.dto';
@@ -49,7 +50,8 @@ export class CustomersService {
         data,
         meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       };
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       let filtered = globalStore.customers.filter((c) => !c.deletedAt);
       if (filters.isActive !== undefined) {
         filtered = filtered.filter((c) => c.isActive === filters.isActive);
@@ -78,7 +80,9 @@ export class CustomersService {
         where: { id, deletedAt: null },
       });
       if (customer) return customer;
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
     const memCustomer = globalStore.customers.find(
       (c) => c.id === id && !c.deletedAt,
@@ -127,6 +131,7 @@ export class CustomersService {
       return customer;
     } catch (err: any) {
       if (err instanceof ConflictException) throw err;
+      if (!useInMemoryFallback()) throw err;
 
       const id = randomUUID();
       const newCust = {
@@ -167,7 +172,9 @@ export class CustomersService {
           ...(dto.email !== undefined
             ? { email: dto.email?.toLowerCase().trim() }
             : {}),
-          ...(dto.address !== undefined ? { address: dto.address?.trim() } : {}),
+          ...(dto.address !== undefined
+            ? { address: dto.address?.trim() }
+            : {}),
           ...(dto.city !== undefined ? { city: dto.city?.trim() } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes?.trim() } : {}),
         },

@@ -7,6 +7,7 @@ import {
   ServiceStatus,
   UserRole,
 } from '@prisma/client';
+import type { Invoice, Payment, Service } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
@@ -30,6 +31,8 @@ describe('Invoice Flow Integration', () => {
   let invoiceId: string;
 
   const testSuffix = Date.now().toString();
+
+  type RegisteredPayment = Payment & { updatedInvoice: Invoice };
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -128,7 +131,7 @@ describe('Invoice Flow Integration', () => {
     customerId = customer.id;
     expect(customer.id).toBeDefined();
 
-    const service = await servicesService.create(
+    const service = (await servicesService.create(
       {
         customerId: customer.id,
         serviceTypeId,
@@ -140,33 +143,35 @@ describe('Invoice Flow Integration', () => {
         requestedAt: new Date().toISOString(),
       },
       actorId,
-    );
+    )) as Service;
     serviceId = service.id;
     expect(service.status).toBe(ServiceStatus.SOLICITADO);
     expect(service.total.toNumber()).toBe(59500);
 
-    const finished = await servicesService.updateStatus(
+    const finished = (await servicesService.updateStatus(
       service.id,
       { status: ServiceStatus.TERMINADO },
       actorId,
-    );
+    )) as Service;
     expect(finished.status).toBe(ServiceStatus.TERMINADO);
 
-    const invoice = await servicesService.invoiceFromService(
+    const invoice = (await servicesService.invoiceFromService(
       service.id,
       { dueDate: new Date(Date.now() + 30 * 86400000).toISOString() },
       actorId,
-    );
+    )) as Invoice;
     invoiceId = invoice.id;
     expect(invoice.status).toBe(InvoiceStatus.EMITIDA);
     expect(invoice.invoiceNumber).toBeTruthy();
     expect(invoice.balance.toNumber()).toBe(59500);
 
-    const updatedService = await servicesService.findOne(service.id);
+    const updatedService = (await servicesService.findOne(
+      service.id,
+    )) as Service;
     expect(updatedService.status).toBe(ServiceStatus.FACTURADO);
 
     const partialAmount = 30000;
-    const partialPayment = await paymentsService.register(
+    const partialPayment = (await paymentsService.register(
       {
         invoiceId: invoice.id,
         amount: partialAmount,
@@ -175,7 +180,7 @@ describe('Invoice Flow Integration', () => {
         reference: 'TEST-PARTIAL',
       },
       actorId,
-    );
+    )) as RegisteredPayment;
     expect(partialPayment.updatedInvoice.status).toBe(
       InvoiceStatus.PARCIALMENTE_PAGADA,
     );
@@ -185,7 +190,7 @@ describe('Invoice Flow Integration', () => {
     expect(partialPayment.updatedInvoice.balance.toNumber()).toBe(29500);
 
     const remainingBalance = partialPayment.updatedInvoice.balance.toNumber();
-    const fullPayment = await paymentsService.register(
+    const fullPayment = (await paymentsService.register(
       {
         invoiceId: invoice.id,
         amount: remainingBalance,
@@ -194,12 +199,12 @@ describe('Invoice Flow Integration', () => {
         reference: 'TEST-FULL',
       },
       actorId,
-    );
+    )) as RegisteredPayment;
     expect(fullPayment.updatedInvoice.status).toBe(InvoiceStatus.PAGADA);
     expect(fullPayment.updatedInvoice.balance.toNumber()).toBe(0);
     expect(fullPayment.updatedInvoice.paidAmount.toNumber()).toBe(59500);
 
-    const finalInvoice = await invoicesService.findOne(invoice.id);
+    const finalInvoice = (await invoicesService.findOne(invoice.id)) as Invoice;
     expect(finalInvoice.status).toBe(InvoiceStatus.PAGADA);
     expect(finalInvoice.balance.toNumber()).toBe(0);
   }, 30000);

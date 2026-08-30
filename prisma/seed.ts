@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
   DocumentType,
@@ -47,6 +48,7 @@ async function main() {
       fullName: 'Administrador DEV',
       role: UserRole.ADMIN,
       isActive: true,
+      passwordHash: await bcrypt.hash(process.env.DEV_PASSWORD ?? 'Admin123!', 10),
     },
   });
 
@@ -56,6 +58,7 @@ async function main() {
       fullName: 'Facturador DEV',
       role: UserRole.FACTURADOR,
       isActive: true,
+      passwordHash: await bcrypt.hash(process.env.DEV_PASSWORD ?? 'Admin123!', 10),
     },
   });
 
@@ -65,6 +68,7 @@ async function main() {
       fullName: 'Consulta DEV',
       role: UserRole.CONSULTA,
       isActive: true,
+      passwordHash: await bcrypt.hash(process.env.DEV_PASSWORD ?? 'Admin123!', 10),
     },
   });
 

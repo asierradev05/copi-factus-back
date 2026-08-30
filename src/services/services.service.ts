@@ -14,6 +14,7 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { globalStore } from '../database/in-memory-store';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { calculateLineTotal, toDecimal } from '../common/utils/money.util';
 import { allocateInvoiceNumber } from '../common/utils/invoice-number.util';
 import {
@@ -38,7 +39,8 @@ export class ServicesService {
         where: { isActive: true },
         orderBy: { name: 'asc' },
       });
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       return globalStore.serviceTypes.filter((st) => st.isActive);
     }
   }
@@ -61,17 +63,20 @@ export class ServicesService {
         },
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.CREATE,
-        entityType: 'ServiceType',
-        entityId: serviceType.id,
-        newValue: serviceType,
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.CREATE,
+          entityType: 'ServiceType',
+          entityId: serviceType.id,
+          newValue: serviceType,
+        })
+        .catch(() => {});
 
       return serviceType;
     } catch (err: any) {
       if (err instanceof ConflictException) throw err;
+      if (!useInMemoryFallback()) throw err;
       const newType = {
         id: `st-${Date.now()}`,
         name: dto.name.trim(),
@@ -114,7 +119,8 @@ export class ServicesService {
         data,
         meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       };
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       let filtered = globalStore.services;
       if (filters.customerId) {
         filtered = filtered.filter((s) => s.customerId === filters.customerId);
@@ -141,7 +147,8 @@ export class ServicesService {
         include: { customer: true, serviceType: true },
         orderBy: { requestedAt: 'asc' },
       });
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       return globalStore.services.filter(
         (s) =>
           (s.status === ServiceStatus.TERMINADO ||
@@ -162,7 +169,9 @@ export class ServicesService {
         },
       });
       if (service) return service;
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
     const memService = globalStore.services.find((s) => s.id === id);
     if (!memService) {
@@ -203,23 +212,30 @@ export class ServicesService {
         include: { customer: true, serviceType: true },
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.CREATE,
-        entityType: 'Service',
-        entityId: service.id,
-        newValue: service,
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.CREATE,
+          entityType: 'Service',
+          entityId: service.id,
+          newValue: service,
+        })
+        .catch(() => {});
 
       return service;
     } catch (err: any) {
       if (err instanceof NotFoundException) throw err;
+      if (!useInMemoryFallback()) throw err;
 
-      const customer = globalStore.customers.find((c) => c.id === dto.customerId) ?? {
+      const customer = globalStore.customers.find(
+        (c) => c.id === dto.customerId,
+      ) ?? {
         id: dto.customerId,
         name: 'Cliente Demo',
       };
-      const serviceType = globalStore.serviceTypes.find((st) => st.id === dto.serviceTypeId) ?? {
+      const serviceType = globalStore.serviceTypes.find(
+        (st) => st.id === dto.serviceTypeId,
+      ) ?? {
         id: dto.serviceTypeId,
         name: 'Servicio Demo',
       };
@@ -268,14 +284,16 @@ export class ServicesService {
         include: { customer: true, serviceType: true },
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.UPDATE,
-        entityType: 'Service',
-        entityId: service.id,
-        oldValue: { status: existing.status },
-        newValue: { status: service.status },
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.UPDATE,
+          entityType: 'Service',
+          entityId: service.id,
+          oldValue: { status: existing.status },
+          newValue: { status: service.status },
+        })
+        .catch(() => {});
 
       return service;
     } catch {
@@ -460,7 +478,8 @@ export class ServicesService {
       });
 
       return invoice;
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       const nextNum = globalStore.companySettings.invoiceNextNumber++;
       const invoiceNumber = `${globalStore.companySettings.invoicePrefix}-${String(nextNum).padStart(6, '0')}`;
       const invId = randomUUID();
@@ -510,9 +529,13 @@ export class ServicesService {
         where: { id: customerId, deletedAt: null, isActive: true },
       });
       if (customer) return;
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
-    const memCust = globalStore.customers.find((c) => c.id === customerId && !c.deletedAt);
+    const memCust = globalStore.customers.find(
+      (c) => c.id === customerId && !c.deletedAt,
+    );
     if (!memCust) {
       throw new NotFoundException('Cliente no encontrado o inactivo.');
     }
@@ -524,9 +547,13 @@ export class ServicesService {
         where: { id: serviceTypeId, isActive: true },
       });
       if (serviceType) return;
-    } catch {}
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
 
-    const memST = globalStore.serviceTypes.find((st) => st.id === serviceTypeId);
+    const memST = globalStore.serviceTypes.find(
+      (st) => st.id === serviceTypeId,
+    );
     if (!memST) {
       throw new NotFoundException('Tipo de servicio no encontrado.');
     }

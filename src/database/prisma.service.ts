@@ -37,7 +37,9 @@ export class PrismaService
     try {
       await this.$connect();
       this.isConnected = true;
-      console.log('✅ Base de datos PostgreSQL / Supabase conectada con éxito.');
+      console.log(
+        '✅ Base de datos PostgreSQL / Supabase conectada con éxito.',
+      );
     } catch (error: any) {
       this.isConnected = false;
       console.warn(

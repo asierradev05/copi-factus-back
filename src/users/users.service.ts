@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { AuditAction } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -19,11 +20,33 @@ export class UsersService {
   async findAll() {
     return this.prisma.profile.findMany({
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        authId: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.profile.findUnique({ where: { id } });
+    const user = await this.prisma.profile.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        authId: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado.');
     }
@@ -44,6 +67,7 @@ export class UsersService {
         fullName: dto.fullName.trim(),
         role: dto.role,
         isActive: dto.isActive ?? true,
+        passwordHash: await bcrypt.hash(dto.password, 10),
       },
     });
 
@@ -52,10 +76,10 @@ export class UsersService {
       action: AuditAction.CREATE,
       entityType: 'Profile',
       entityId: user.id,
-      newValue: user,
+      newValue: this.sanitize(user),
     });
 
-    return user;
+    return this.sanitize(user);
   }
 
   async update(id: string, dto: UpdateUserDto, actorId: string) {
@@ -81,6 +105,9 @@ export class UsersService {
           : {}),
         ...(dto.role !== undefined ? { role: dto.role } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.password !== undefined
+          ? { passwordHash: await bcrypt.hash(dto.password, 10) }
+          : {}),
       },
     });
 
@@ -90,10 +117,10 @@ export class UsersService {
       entityType: 'Profile',
       entityId: user.id,
       oldValue: existing,
-      newValue: user,
+      newValue: this.sanitize(user),
     });
 
-    return user;
+    return this.sanitize(user);
   }
 
   async remove(id: string, actorId: string) {
@@ -110,9 +137,14 @@ export class UsersService {
       entityType: 'Profile',
       entityId: user.id,
       oldValue: existing,
-      newValue: user,
+      newValue: this.sanitize(user),
     });
 
-    return user;
+    return this.sanitize(user);
+  }
+
+  private sanitize<T extends { passwordHash?: string | null }>(user: T) {
+    const { passwordHash: _passwordHash, ...rest } = user;
+    return rest;
   }
 }

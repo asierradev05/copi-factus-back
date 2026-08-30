@@ -8,6 +8,7 @@ import { AuditAction, InvoiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { globalStore } from '../database/in-memory-store';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { toDecimal } from '../common/utils/money.util';
 import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
 import { CreatePaymentDto, FilterPaymentDto } from './dto/payment.dto';
@@ -48,7 +49,8 @@ export class PaymentsService {
         data,
         meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
       };
-    } catch {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
       let filtered = globalStore.payments;
       if (filters.invoiceId) {
         filtered = filtered.filter((p) => p.invoiceId === filters.invoiceId);
@@ -137,19 +139,25 @@ export class PaymentsService {
         return { payment, updatedInvoice };
       });
 
-      await this.auditService.log({
-        userId: actorId,
-        action: AuditAction.PAYMENT,
-        entityType: 'Payment',
-        entityId: result.payment.id,
-        newValue: result.payment,
-      }).catch(() => {});
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.PAYMENT,
+          entityType: 'Payment',
+          entityId: result.payment.id,
+          newValue: result.payment,
+        })
+        .catch(() => {});
 
       return result;
     } catch (err: any) {
-      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+      if (
+        err instanceof BadRequestException ||
+        err instanceof NotFoundException
+      ) {
         throw err;
       }
+      if (!useInMemoryFallback()) throw err;
 
       const invoice = globalStore.invoices.find((i) => i.id === dto.invoiceId);
       if (!invoice) {

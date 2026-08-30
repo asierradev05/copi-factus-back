@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 import { globalStore } from '../database/in-memory-store';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { PrismaService } from '../database/prisma.service';
 import {
   isOverdue,
@@ -200,8 +201,11 @@ export class AccountsReceivableService {
         invoices,
         payments,
       };
-    } catch {
-      const customer = globalStore.customers.find((c) => c.id === customerId) ?? {
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+      const customer = globalStore.customers.find(
+        (c) => c.id === customerId,
+      ) ?? {
         id: customerId,
         name: 'Cliente E2E Test',
       };
@@ -216,14 +220,8 @@ export class AccountsReceivableService {
         (acc, i) => acc + Number(i.total),
         0,
       );
-      const totalPaid = payments.reduce(
-        (acc, p) => acc + Number(p.amount),
-        0,
-      );
-      const balance = invoices.reduce(
-        (acc, i) => acc + Number(i.balance),
-        0,
-      );
+      const totalPaid = payments.reduce((acc, p) => acc + Number(p.amount), 0);
+      const balance = invoices.reduce((acc, i) => acc + Number(i.balance), 0);
 
       return {
         customer,

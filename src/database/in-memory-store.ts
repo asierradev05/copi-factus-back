@@ -1,4 +1,10 @@
-import { DocumentType, InvoiceStatus, PaymentMethod, ServiceStatus, UserRole } from '@prisma/client';
+import {
+  DocumentType,
+  InvoiceStatus,
+  PaymentMethod,
+  ServiceStatus,
+  UserRole,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 
 export class InMemoryStore {

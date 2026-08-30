@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class FilterReceivableDto {
   @IsOptional()
@@ -12,5 +12,6 @@ export class FilterReceivableDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }

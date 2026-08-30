@@ -94,6 +94,19 @@ export class DashboardService {
             })),
           },
           {
+            key: 'delivery',
+            title: 'Orden de entrega',
+            cards: deliveryOrders.map((del) => ({
+              id: del.id,
+              label: 'Orden de entrega',
+              number: del.doNumber,
+              customer: del.customer?.name ?? 'Cliente',
+              date: del.scheduledAt ?? del.deliveredAt,
+              total: null,
+              status: del.status,
+            })),
+          },
+          {
             key: 'invoice',
             title: 'Facturas',
             cards: invoices.map((inv) => ({
@@ -104,19 +117,6 @@ export class DashboardService {
               date: inv.issueDate ?? inv.createdAt,
               total: Number(inv.total),
               status: inv.status,
-            })),
-          },
-          {
-            key: 'delivery',
-            title: 'Entregas',
-            cards: deliveryOrders.map((del) => ({
-              id: del.id,
-              label: 'Orden de entrega',
-              number: del.doNumber,
-              customer: del.customer?.name ?? 'Cliente',
-              date: del.scheduledAt ?? del.deliveredAt,
-              total: null,
-              status: del.status,
             })),
           },
           {

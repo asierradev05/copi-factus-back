@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -58,6 +59,10 @@ export class CreatePurchaseOrderDto {
   invoiceId?: string;
 
   @IsOptional()
+  @IsUUID()
+  quoteId?: string;
+
+  @IsOptional()
   @IsString()
   notes?: string;
 
@@ -101,5 +106,6 @@ export class FilterPurchaseOrderDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(100, { message: 'El límite no puede exceder 100.' })
   limit?: number;
 }
