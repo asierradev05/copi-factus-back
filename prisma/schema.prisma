@@ -121,6 +121,7 @@ model Profile {
   purchaseOrdersCreated PurchaseOrder[]      @relation("PurchaseOrderCreator")
   deliveryOrdersCreated DeliveryOrder[]      @relation("DeliveryOrderCreator")
   receivedDocumentsCreated ReceivedDocument[] @relation("ReceivedDocumentCreator")
+  publicInquiriesHandled PublicInquiry[] @relation("PublicInquiryHandler")
 
   @@map("profiles")
 }
@@ -551,4 +552,31 @@ model ReceivedDocument {
   @@index([customerId])
   @@index([issueDate])
   @@map("received_documents")
+}
+
+enum PublicInquiryStatus {
+  NUEVA
+  CONTACTADA
+  CERRADA
+}
+
+model PublicInquiry {
+  id        String              @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  company   String?  @map("company")
+  service   String?
+  message   String?
+  source    String?  @default("web")
+  status    PublicInquiryStatus @default(NUEVA)
+  handledById String? @map("handled_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  handledBy Profile? @relation("PublicInquiryHandler", fields: [handledById], references: [id])
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("public_inquiries")
 }

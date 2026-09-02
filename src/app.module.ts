@@ -22,6 +22,7 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { DeliveryOrdersModule } from './delivery-orders/delivery-orders.module';
 import { ResolutionsModule } from './resolutions/resolutions.module';
 import { ReceivedDocumentsModule } from './received-documents/received-documents.module';
+import { PublicInquiriesModule } from './public-inquiries/public-inquiries.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SupabaseModule } from './common/supabase/supabase.module';
 
@@ -54,6 +55,7 @@ import { SupabaseModule } from './common/supabase/supabase.module';
     DeliveryOrdersModule,
     ResolutionsModule,
     ReceivedDocumentsModule,
+    PublicInquiriesModule,
     DashboardModule,
   ],
   providers: [

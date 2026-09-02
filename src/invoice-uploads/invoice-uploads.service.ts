@@ -166,7 +166,7 @@ export class InvoiceUploadsService {
 
   private matchDate(text: string): Date | undefined {
     const patterns = [
-      /fecha(?: de\s+)?(?:factura|emisi[oó]n)?[:\s.]*([\d]{1,2})[-\/]([\d]{1,2})[-\/]([\d]{4})/i,
+      /fecha(?: de\s+)?(?:factura|emisi[oó]n)?[:\s.]*([\d]{1,2})[-/]([\d]{1,2})[-/]([\d]{4})/i,
       /([\d]{4})-([\d]{1,2})-([\d]{1,2})/,
       /([\d]{4})-([\d]{1,2})-([\d]{1,2})[T\s][\d:]+/,
     ];

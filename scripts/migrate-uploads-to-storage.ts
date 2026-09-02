@@ -7,7 +7,6 @@ import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 
 const BUCKET = 'invoice-pdfs';
-const DIR = path.join(process.cwd(), 'uploads', 'invoice-pdfs');
 const apply = process.argv.includes('--apply');
 
 async function main() {
@@ -83,6 +82,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err.message);
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

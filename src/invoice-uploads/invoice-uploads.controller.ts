@@ -59,10 +59,7 @@ export class InvoiceUploadsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
-  create(
-    @Body() dto: RegisterInvoiceUploadDto,
-    @CurrentUser() user: AuthUser,
-  ) {
+  create(@Body() dto: RegisterInvoiceUploadDto, @CurrentUser() user: AuthUser) {
     return this.invoiceUploads.create(dto, user.id);
   }
 }
