@@ -1,17 +1,15 @@
-const serverless = require('serverless-http');
-
-let cachedHandler;
-
-async function prepareHandler() {
-  if (!cachedHandler) {
-    const { createNestApp } = require('../dist/src/main');
-    const app = await createNestApp();
-    cachedHandler = serverless(app.getHttpAdapter().getInstance());
-  }
-  return cachedHandler;
-}
+let appPromise;
+let initialized = false;
 
 module.exports = async function handler(req, res) {
-  const h = await prepareHandler();
-  return h(req, res);
+  if (!appPromise) {
+    const { createNestApp } = require('../dist/src/main');
+    appPromise = createNestApp();
+  }
+  const app = await appPromise;
+  if (!initialized) {
+    initialized = true;
+    await app.init();
+  }
+  return app.getHttpAdapter().getInstance()(req, res);
 };

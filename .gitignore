@@ -17,3 +17,5 @@ supabase/.temp/
 .agents/
 .claude/
 .windsurf/
+
+.vercel
