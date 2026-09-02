@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx prisma generate && npm run build",
+  "buildCommand": "npx prisma generate && npm run build && node -e \"require('fs').mkdirSync('public',{recursive:true})\"",
   "functions": {
     "api/index.js": { "maxDuration": 300 }
   },
