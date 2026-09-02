@@ -73,7 +73,21 @@ Los servicios usan `useInMemoryFallback()` (`src/common/utils/fallback.util.ts`)
 - En `NODE_ENV=production` el fallback está **desactivado** y los errores de DB se propagan.
 - En dev se puede habilitar con `ALLOW_IN_MEMORY_FALLBACK=true` (por defecto activo en dev).
 
-## Despliegue (Render)
+## Despliegue (Vercel Hobby, $0)
+
+Este backend corre en **Vercel** como una única Function:
+- Entry sin servidor: `api/index.js` (usa `serverless-http` sobre la app NestJS).
+- `vercel.json` enruta `/api/*` hacia la function y fija `maxDuration: 300`.
+- `DATABASE_URL` debe ser el **transaction pooler** de Supabase (puerto 6543, `connection_limit` pequeño) para el contexto serverless.
+- `DIRECT_URL` (conexión directa, puerto 5432) se usa solo para `prisma db push`, scripts y migraciones.
+- Los PDFs de facturas se guardan en **Supabase Storage** (bucket privado `invoice-pdfs`) con subida directa desde el navegador (presign → PUT → register) y descarga por URL firmada (evita el límite de body de 4.5MB de Vercel).
+- CI/CD: en push a `main`, `.github/workflows/deploy.yml` genera el cliente de Prisma, hace `prisma db push`, garantiza el bucket y despliega con el token de Vercel.
+
+Secrets requeridos (GitHub/Vercel): `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `DATABASE_URL` (pooler), `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL`, `CORS_ORIGIN`, `DEV_PASSWORD`.
+
+> Fallback: el blueprint de **Render** (`render.yaml`) sigue disponible si algún día Vercel no es viable, pero Vercel es el destino principal.
+
+## Despliegue (Render, fallback)
 
 - Archivo `render.yaml` (Blueprint Web Service).
 - Build: `npm ci && npx prisma generate && npm run build`
@@ -92,6 +106,8 @@ npm run lint            # Lint
 npm run db:migrate      # Migraciones Prisma
 npm run db:seed         # Datos demo (hashea DEV_PASSWORD)
 npm run backfill:password-hashes  # Hashea contraseñas de perfiles existentes
+npm run ensure:storage  # Crea el bucket invoice-pdfs en Supabase Storage
+npm run migrate:uploads # Migra PDFs históricos a Storage (--apply para aplicar)
 ```
 
 ## Arquitectura
