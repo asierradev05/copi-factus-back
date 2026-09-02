@@ -1,21 +1,17 @@
 import {
+  Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   ParseIntPipe,
   Post,
   Query,
-  Res,
-  StreamableFile,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '@prisma/client';
-import type { Response } from 'express';
 import { InvoiceUploadsService } from './invoice-uploads.service';
-import type { UploadedFileLike } from './invoice-uploads.service';
+import { RegisterInvoiceUploadDto } from './dto/register-invoice-upload.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -44,33 +40,29 @@ export class InvoiceUploadsController {
 
   @Get(':id/file')
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR, UserRole.CONSULTA)
-  async getFile(
-    @Param('id') id: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async getFileLink(@Param('id') id: string) {
     const upload = await this.invoiceUploads.findOne(id);
     if (!upload) {
-      return null;
+      throw new NotFoundException(
+        'El archivo de la factura no fue encontrado.',
+      );
     }
-    const buffer = this.invoiceUploads.getFileBuffer(upload);
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${upload.fileName}"`,
-    });
-    return new StreamableFile(buffer);
+    const url = await this.invoiceUploads.getSignedReadUrl(upload);
+    return { url };
+  }
+
+  @Post('presign')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  presignUpload() {
+    return this.invoiceUploads.presignUpload();
   }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 10 * 1024 * 1024 },
-    }),
-  )
-  upload(
-    @UploadedFile() file: UploadedFileLike | undefined,
+  create(
+    @Body() dto: RegisterInvoiceUploadDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.invoiceUploads.create(file, user.id);
+    return this.invoiceUploads.create(dto, user.id);
   }
 }

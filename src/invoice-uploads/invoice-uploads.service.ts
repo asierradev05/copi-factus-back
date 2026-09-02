@@ -1,5 +1,3 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
   BadRequestException,
   Injectable,
@@ -9,13 +7,7 @@ import { AuditAction, Prisma } from '@prisma/client';
 import { PDFParse } from 'pdf-parse';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
-
-export interface UploadedFileLike {
-  buffer: Buffer;
-  originalname: string;
-  mimetype: string;
-  size: number;
-}
+import { SupabaseService } from '../common/supabase/supabase.service';
 
 export interface ExtractedInvoiceData {
   nit?: string;
@@ -24,13 +16,14 @@ export interface ExtractedInvoiceData {
   concept?: string;
 }
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'invoice-pdfs');
+const BUCKET = 'invoice-pdfs';
 
 @Injectable()
 export class InvoiceUploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly supabase: SupabaseService,
   ) {}
 
   async findAll(page = 1, limit = 20) {
@@ -63,32 +56,28 @@ export class InvoiceUploadsService {
   }
 
   async create(
-    file: UploadedFileLike | undefined,
+    dto: {
+      fileName: string;
+      fileSize: number;
+      storagePath: string;
+    },
     userId: string,
   ): Promise<{ upload: unknown; extracted: ExtractedInvoiceData }> {
-    if (!file) {
-      throw new BadRequestException('Debe adjuntar un archivo PDF.');
-    }
-    if (
-      file.mimetype !== 'application/pdf' &&
-      !file.originalname.toLowerCase().endsWith('.pdf')
-    ) {
-      throw new BadRequestException('Solo se admiten archivos PDF.');
+    const safeName = dto.fileName.replace(/[^\w.\-() ]/g, '_');
+    const [bucket, ...rest] = dto.storagePath.split('/');
+    const objectPath = rest.join('/');
+    if (!bucket || !objectPath) {
+      throw new BadRequestException('storagePath inválido.');
     }
 
-    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const safeName = file.originalname.replace(/[^\w.\-() ]/g, '_');
-    const fileName = `${fileId}-${safeName}`;
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    fs.writeFileSync(path.join(UPLOADS_DIR, fileName), file.buffer);
-
-    const extracted = await this.extractFromPdf(file.buffer);
+    const buffer = await this.supabase.downloadAsBuffer(bucket, objectPath);
+    const extracted = await this.extractFromPdf(buffer);
 
     const upload = await this.prisma.invoiceUpload.create({
       data: {
-        fileName,
-        filePath: `/uploads/invoice-pdfs/${fileName}`,
-        fileSize: file.size,
+        fileName: safeName,
+        filePath: dto.storagePath,
+        fileSize: dto.fileSize,
         extractedNit: extracted.nit,
         extractedDate: extracted.date,
         extractedAmount:
@@ -120,24 +109,22 @@ export class InvoiceUploadsService {
     return { upload, extracted };
   }
 
-  getFileBuffer(upload: {
-    filePath: string;
-    fileName: string;
-    fileSize: number;
-  }): Buffer {
-    const uploadsResolved = path.resolve(UPLOADS_DIR);
-    const resolved = path.resolve(process.cwd(), upload.filePath);
-    if (resolved !== uploadsResolved && !resolved.startsWith(uploadsResolved + path.sep)) {
+  async presignUpload(): Promise<{ uploadUrl: string; storagePath: string }> {
+    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const storagePath = `${BUCKET}/${fileId}.pdf`;
+    const uploadUrl = await this.supabase.presignUploadUrl(BUCKET, storagePath);
+    return { uploadUrl, storagePath };
+  }
+
+  async getSignedReadUrl(upload: { filePath: string }): Promise<string> {
+    const [bucket, ...rest] = upload.filePath.split('/');
+    const objectPath = rest.join('/');
+    if (!bucket || !objectPath) {
       throw new NotFoundException(
         'El archivo de la factura no fue encontrado.',
       );
     }
-    if (!fs.existsSync(resolved)) {
-      throw new NotFoundException(
-        'El archivo de la factura no fue encontrado.',
-      );
-    }
-    return fs.readFileSync(resolved);
+    return this.supabase.signedReadUrl(bucket, objectPath);
   }
 
   private async extractFromPdf(buffer: Buffer): Promise<ExtractedInvoiceData> {

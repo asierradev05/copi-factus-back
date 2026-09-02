@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:seed": "ts-node prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
-    "backfill:password-hashes": "ts-node scripts/backfill-password-hashes.ts"
+    "backfill:password-hashes": "ts-node scripts/backfill-password-hashes.ts",
+    "ensure:storage": "ts-node scripts/ensure-storage-bucket.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
