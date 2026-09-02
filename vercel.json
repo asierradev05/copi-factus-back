@@ -1,9 +1,10 @@
 {
-  "buildCommand": "npx prisma generate && npm run build && node -e \"require('fs').mkdirSync('public',{recursive:true})\"",
+  "buildCommand": "npx prisma generate && npm run build",
   "functions": {
     "api/index.js": { "maxDuration": 300 }
   },
   "rewrites": [
+    { "source": "/", "destination": "/api/index" },
     { "source": "/api", "destination": "/api/index" },
     { "source": "/api/(.*)", "destination": "/api/index" }
   ]
