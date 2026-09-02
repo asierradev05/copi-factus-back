@@ -83,7 +83,7 @@ Este backend corre en **Vercel** como una única Function:
 - Los PDFs de facturas se guardan en **Supabase Storage** (bucket privado `invoice-pdfs`) con subida directa desde el navegador (presign → PUT → register) y descarga por URL firmada (evita el límite de body de 4.5MB de Vercel).
 - CI/CD: en push a `main`, `.github/workflows/deploy.yml` genera el cliente de Prisma, hace `prisma db push`, garantiza el bucket y despliega con el token de Vercel.
 
-Secrets requeridos (GitHub/Vercel): `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `DATABASE_URL` (pooler), `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL`, `CORS_ORIGIN`, `DEV_PASSWORD`.
+Secrets requeridos (GitHub/Vercel): `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (se obtienen con `npx vercel link` y `npx vercel pull`), `DATABASE_URL` (pooler), `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL`, `CORS_ORIGIN`, `DEV_PASSWORD`.
 
 > Fallback: el blueprint de **Render** (`render.yaml`) sigue disponible si algún día Vercel no es viable, pero Vercel es el destino principal.
 
