@@ -32,6 +32,7 @@ export class InvoiceUploadsService {
       this.prisma.invoiceUpload.findMany({
         include: {
           uploadedBy: { select: { id: true, email: true, fullName: true } },
+          customer: { select: { id: true, name: true, documentNumber: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -51,8 +52,37 @@ export class InvoiceUploadsService {
       where: { id },
       include: {
         uploadedBy: { select: { id: true, email: true, fullName: true } },
+        customer: { select: { id: true, name: true, documentNumber: true } },
       },
     });
+  }
+
+  async update(id: string, customerId: string, userId: string) {
+    const existing = await this.prisma.invoiceUpload.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException('La factura importada no fue encontrada.');
+    }
+
+    const updated = await this.prisma.invoiceUpload.update({
+      where: { id },
+      data: { customerId },
+      include: {
+        uploadedBy: { select: { id: true, email: true, fullName: true } },
+        customer: { select: { id: true, name: true, documentNumber: true } },
+      },
+    });
+
+    await this.audit.log({
+      userId,
+      action: AuditAction.UPDATE,
+      entityType: 'InvoiceUpload',
+      entityId: id,
+      newValue: { customerId },
+    });
+
+    return updated;
   }
 
   async create(
@@ -60,6 +90,7 @@ export class InvoiceUploadsService {
       fileName: string;
       fileSize: number;
       storagePath: string;
+      customerId?: string;
     },
     userId: string,
   ): Promise<{ upload: unknown; extracted: ExtractedInvoiceData }> {
@@ -86,9 +117,11 @@ export class InvoiceUploadsService {
             : null,
         extractedConcept: extracted.concept,
         uploadedById: userId,
+        customerId: dto.customerId ?? null,
       },
       include: {
         uploadedBy: { select: { id: true, email: true, fullName: true } },
+        customer: { select: { id: true, name: true, documentNumber: true } },
       },
     });
 

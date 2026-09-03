@@ -1,4 +1,12 @@
-import { IsInt, IsNotEmpty, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class RegisterInvoiceUploadDto {
   @IsString()
@@ -13,4 +21,9 @@ export class RegisterInvoiceUploadDto {
   @IsString()
   @IsNotEmpty()
   storagePath: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  customerId?: string;
 }

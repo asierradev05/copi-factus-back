@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -12,6 +13,7 @@ import {
 import { UserRole } from '@prisma/client';
 import { InvoiceUploadsService } from './invoice-uploads.service';
 import { RegisterInvoiceUploadDto } from './dto/register-invoice-upload.dto';
+import { UpdateInvoiceUploadDto } from './dto/update-invoice-upload.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -61,5 +63,15 @@ export class InvoiceUploadsController {
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
   create(@Body() dto: RegisterInvoiceUploadDto, @CurrentUser() user: AuthUser) {
     return this.invoiceUploads.create(dto, user.id);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceUploadDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.invoiceUploads.update(id, dto.customerId, user.id);
   }
 }
