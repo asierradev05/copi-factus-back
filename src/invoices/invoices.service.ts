@@ -147,6 +147,8 @@ export class InvoicesService {
           items: { include: { product: true } },
           payments: true,
           serviceLinks: { include: { service: true } },
+          purchaseOrders: true,
+          deliveryOrders: true,
         },
       });
 

@@ -12,9 +12,12 @@ export class DocumentAttachmentsService {
     private readonly supabase: SupabaseService,
   ) {}
 
-  async findByEntity(entityType: string, entityId: string) {
+  async findByEntity(entityType?: string, entityId?: string) {
     return this.prisma.documentAttachment.findMany({
-      where: { entityType, entityId },
+      where: {
+        ...(entityType && { entityType }),
+        ...(entityId && { entityId }),
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
