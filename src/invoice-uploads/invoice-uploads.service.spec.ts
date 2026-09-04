@@ -45,6 +45,7 @@ describe('InvoiceUploadsService (customer association)', () => {
         name: `Cliente Import ${testSuffix}`,
         documentType: DocumentType.NIT,
         documentNumber: `IMP-${testSuffix}`,
+        phone: `300-IMP-${testSuffix}`,
       },
     });
     customerId = customer.id;

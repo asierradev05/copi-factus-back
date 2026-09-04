@@ -12,16 +12,17 @@ export class CreateCustomerDto {
   @IsNotEmpty({ message: 'El nombre es obligatorio.' })
   name!: string;
 
+  @IsOptional()
   @IsEnum(DocumentType, { message: 'El tipo de documento no es válido.' })
-  documentType!: DocumentType;
-
-  @IsString()
-  @IsNotEmpty({ message: 'El número de documento es obligatorio.' })
-  documentNumber!: string;
+  documentType?: DocumentType;
 
   @IsOptional()
   @IsString()
-  phone?: string;
+  documentNumber?: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El teléfono es obligatorio.' })
+  phone!: string;
 
   @IsOptional()
   @IsEmail({}, { message: 'El correo electrónico no es válido.' })

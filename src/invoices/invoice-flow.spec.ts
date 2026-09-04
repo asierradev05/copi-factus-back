@@ -124,6 +124,7 @@ describe('Invoice Flow Integration', () => {
         name: `Cliente Test ${testSuffix}`,
         documentType: DocumentType.CC,
         documentNumber: `TEST-${testSuffix}`,
+        phone: `300-TEST-${testSuffix}`,
         email: `cliente-${testSuffix}@test.com`,
       },
       actorId,

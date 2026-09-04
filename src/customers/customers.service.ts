@@ -31,6 +31,7 @@ export class CustomersService {
       if (filters.search) {
         where.OR = [
           { name: { contains: filters.search, mode: 'insensitive' } },
+          { phone: { contains: filters.search, mode: 'insensitive' } },
           { documentNumber: { contains: filters.search, mode: 'insensitive' } },
           { email: { contains: filters.search, mode: 'insensitive' } },
         ];
@@ -61,7 +62,8 @@ export class CustomersService {
         filtered = filtered.filter(
           (c) =>
             c.name.toLowerCase().includes(s) ||
-            c.documentNumber.toLowerCase().includes(s) ||
+            (c.phone && c.phone.toLowerCase().includes(s)) ||
+            (c.documentNumber && c.documentNumber.toLowerCase().includes(s)) ||
             (c.email && c.email.toLowerCase().includes(s)),
         );
       }
@@ -94,23 +96,22 @@ export class CustomersService {
   }
 
   async create(dto: CreateCustomerDto, actorId: string) {
-    const docNumber = dto.documentNumber.trim();
     try {
-      const existing = await this.prisma.customer.findUnique({
-        where: { documentNumber: docNumber },
+      const existingByPhone = await this.prisma.customer.findFirst({
+        where: { phone: dto.phone.trim(), deletedAt: null },
       });
-      if (existing && !existing.deletedAt) {
+      if (existingByPhone) {
         throw new ConflictException(
-          'Ya existe un cliente con ese número de documento.',
+          'Ya existe un cliente con este número de teléfono.',
         );
       }
 
       const customer = await this.prisma.customer.create({
         data: {
           name: dto.name.trim(),
-          documentType: dto.documentType,
-          documentNumber: docNumber,
-          phone: dto.phone?.trim(),
+          documentType: dto.documentType ?? 'CC',
+          documentNumber: dto.documentNumber?.trim() ?? null,
+          phone: dto.phone.trim(),
           email: dto.email?.toLowerCase().trim(),
           address: dto.address?.trim(),
           city: dto.city?.trim(),
@@ -137,9 +138,9 @@ export class CustomersService {
       const newCust = {
         id,
         name: dto.name.trim(),
-        documentType: dto.documentType,
-        documentNumber: docNumber,
-        phone: dto.phone?.trim(),
+        documentType: dto.documentType ?? 'CC',
+        documentNumber: dto.documentNumber?.trim() ?? null,
+        phone: dto.phone.trim(),
         email: dto.email?.toLowerCase().trim(),
         address: dto.address?.trim(),
         city: dto.city?.trim(),
@@ -168,7 +169,7 @@ export class CustomersService {
           ...(dto.documentNumber !== undefined
             ? { documentNumber: dto.documentNumber.trim() }
             : {}),
-          ...(dto.phone !== undefined ? { phone: dto.phone?.trim() } : {}),
+          ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
           ...(dto.email !== undefined
             ? { email: dto.email?.toLowerCase().trim() }
             : {}),
