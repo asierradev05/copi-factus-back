@@ -8,6 +8,7 @@ import {
   DeliveryOrderStatus,
   Prisma,
   PurchaseOrderStatus,
+  QuoteStatus,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -91,6 +92,20 @@ export class PurchaseOrdersService {
     });
     if (!customer) {
       throw new BadRequestException('El cliente seleccionado no existe.');
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: { id: dto.quoteId },
+    });
+    if (!quote) {
+      throw new BadRequestException(
+        'La cotización seleccionada no existe.',
+      );
+    }
+    if (quote.status !== QuoteStatus.APROBADA) {
+      throw new BadRequestException(
+        'La cotización debe estar aprobada antes de crear la orden de compra.',
+      );
     }
 
     const { items, subtotal, discountTotal, taxTotal, total } =
@@ -182,6 +197,11 @@ export class PurchaseOrdersService {
     if (po.status === PurchaseOrderStatus.CANCELADA) {
       throw new BadRequestException(
         'No se puede crear una orden de entrega a partir de una orden de compra cancelada.',
+      );
+    }
+    if (po.status !== PurchaseOrderStatus.APROBADA) {
+      throw new BadRequestException(
+        'La orden de compra debe estar aprobada antes de crear la orden de entrega.',
       );
     }
 

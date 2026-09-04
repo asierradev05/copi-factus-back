@@ -8,6 +8,7 @@ import {
   DeliveryOrderStatus,
   InvoiceStatus,
   Prisma,
+  PurchaseOrderStatus,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -85,6 +86,20 @@ export class DeliveryOrdersService {
       throw new BadRequestException('El cliente seleccionado no existe.');
     }
 
+    const po = await this.prisma.purchaseOrder.findUnique({
+      where: { id: dto.purchaseOrderId },
+    });
+    if (!po) {
+      throw new BadRequestException(
+        'La orden de compra seleccionada no existe.',
+      );
+    }
+    if (po.status !== PurchaseOrderStatus.APROBADA) {
+      throw new BadRequestException(
+        'La orden de compra debe estar aprobada antes de crear la orden de entrega.',
+      );
+    }
+
     const items = dto.items.map((item) => ({
       description: item.description.trim(),
       quantity: Number(item.quantity.toFixed(2)),
@@ -99,6 +114,7 @@ export class DeliveryOrdersService {
       data: {
         doNumber,
         customerId: dto.customerId,
+        purchaseOrderId: dto.purchaseOrderId,
         invoiceId: dto.invoiceId,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : new Date(),
         items: items,
@@ -166,6 +182,11 @@ export class DeliveryOrdersService {
     if (doo.status === DeliveryOrderStatus.CANCELADA) {
       throw new BadRequestException(
         'No se puede facturar una orden de entrega cancelada.',
+      );
+    }
+    if (doo.status !== DeliveryOrderStatus.ENTREGADA) {
+      throw new BadRequestException(
+        'La orden de entrega debe marcarse como entregada antes de facturar.',
       );
     }
     if (doo.invoiceId) {

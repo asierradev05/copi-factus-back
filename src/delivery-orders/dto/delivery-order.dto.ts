@@ -35,6 +35,9 @@ export class CreateDeliveryOrderDto {
   @IsUUID()
   customerId!: string;
 
+  @IsUUID()
+  purchaseOrderId!: string;
+
   @IsOptional()
   @IsUUID()
   invoiceId?: string;

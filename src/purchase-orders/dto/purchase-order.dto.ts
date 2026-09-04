@@ -58,9 +58,8 @@ export class CreatePurchaseOrderDto {
   @IsUUID()
   invoiceId?: string;
 
-  @IsOptional()
   @IsUUID()
-  quoteId?: string;
+  quoteId!: string;
 
   @IsOptional()
   @IsString()

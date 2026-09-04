@@ -164,6 +164,11 @@ export class QuotesService {
     if (quote.status === QuoteStatus.FACTURADA) {
       throw new BadRequestException('Esta cotización ya fue facturada.');
     }
+    if (quote.status !== QuoteStatus.APROBADA) {
+      throw new BadRequestException(
+        'La cotización debe estar aprobada antes de crear la orden de compra.',
+      );
+    }
 
     const items = quote.items as Prisma.InputJsonValue as Array<{
       description: string;
