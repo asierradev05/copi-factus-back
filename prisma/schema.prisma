@@ -122,6 +122,7 @@ model Profile {
   deliveryOrdersCreated DeliveryOrder[]      @relation("DeliveryOrderCreator")
   receivedDocumentsCreated ReceivedDocument[] @relation("ReceivedDocumentCreator")
   publicInquiriesHandled PublicInquiry[] @relation("PublicInquiryHandler")
+  attachmentsUploaded DocumentAttachment[] @relation("AttachmentUploader")
 
   @@map("profiles")
 }
@@ -584,4 +585,22 @@ model PublicInquiry {
   @@index([status])
   @@index([createdAt])
   @@map("public_inquiries")
+}
+
+model DocumentAttachment {
+  id           String   @id @default(uuid())
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  fileName     String   @map("file_name")
+  filePath     String   @map("file_path")
+  fileSize     Int?     @map("file_size")
+  mimeType     String?  @map("mime_type")
+  notes        String?
+  uploadedById String   @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  uploadedBy Profile @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("document_attachments")
 }

@@ -25,6 +25,7 @@ import { ReceivedDocumentsModule } from './received-documents/received-documents
 import { PublicInquiriesModule } from './public-inquiries/public-inquiries.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SupabaseModule } from './common/supabase/supabase.module';
+import { DocumentAttachmentsModule } from './document-attachments/document-attachments.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { SupabaseModule } from './common/supabase/supabase.module';
     ReceivedDocumentsModule,
     PublicInquiriesModule,
     DashboardModule,
+    DocumentAttachmentsModule,
   ],
   providers: [
     {
