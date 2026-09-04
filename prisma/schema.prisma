@@ -129,9 +129,9 @@ model Profile {
 model Customer {
   id             String       @id @default(uuid())
   name           String
-  documentType   DocumentType @map("document_type")
-  documentNumber String       @unique @map("document_number")
-  phone          String?
+  documentType   DocumentType @default(CC) @map("document_type")
+  documentNumber String?      @map("document_number")
+  phone          String
   email          String?
   address        String?
   city           String?
@@ -141,15 +141,16 @@ model Customer {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  services Service[]
-  invoices Invoice[]
-  payments Payment[]
-  quotes Quote[]
-  purchaseOrders PurchaseOrder[]
-  deliveryOrders DeliveryOrder[]
+  services         Service[]
+  invoices         Invoice[]
+  payments         Payment[]
+  quotes           Quote[]
+  purchaseOrders   PurchaseOrder[]
+  deliveryOrders   DeliveryOrder[]
   receivedDocuments ReceivedDocument[]
-  invoiceUploads InvoiceUpload[]
+  invoiceUploads   InvoiceUpload[]
 
+  @@index([phone])
   @@map("customers")
 }
 
