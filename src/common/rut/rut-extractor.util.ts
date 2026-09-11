@@ -322,8 +322,15 @@ export async function extractRutFromPdf(
     } finally {
       await parser.destroy();
     }
-  } catch {
+  } catch (err) {
+    console.error('[rut-extract] PDFParse error:', err);
     return {};
   }
-  return parseRutText(text);
+  console.error('[rut-extract] buffer bytes:', buffer.length, '| text chars:', text.length);
+  const result = parseRutText(text);
+  if (!result.name || !result.documentNumber) {
+    console.error('[rut-extract] incomplete parse. name=', !!result.name, 'docNum=', !!result.documentNumber);
+    console.error('[rut-extract] first 600 chars:', JSON.stringify(text.slice(0, 600)));
+  }
+  return result;
 }
