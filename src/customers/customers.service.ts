@@ -111,10 +111,16 @@ export class CustomersService {
           name: dto.name.trim(),
           documentType: dto.documentType ?? 'CC',
           documentNumber: dto.documentNumber?.trim() ?? null,
+          dv: dto.dv?.trim() ?? null,
+          legalOrganizationCode: dto.legalOrganizationCode ?? undefined,
           phone: dto.phone.trim(),
           email: dto.email?.toLowerCase().trim(),
           address: dto.address?.trim(),
           city: dto.city?.trim(),
+          municipalityCode: dto.municipalityCode?.trim() ?? null,
+          countryCode: dto.countryCode?.trim() ?? 'CO',
+          tributeCode: dto.tributeCode?.trim() ?? null,
+          responsibilities: dto.responsibilities ?? undefined,
           notes: dto.notes?.trim(),
         },
       });
@@ -140,10 +146,16 @@ export class CustomersService {
         name: dto.name.trim(),
         documentType: dto.documentType ?? 'CC',
         documentNumber: dto.documentNumber?.trim() ?? null,
+        dv: dto.dv?.trim() ?? null,
+        legalOrganizationCode: dto.legalOrganizationCode ?? undefined,
         phone: dto.phone.trim(),
         email: dto.email?.toLowerCase().trim(),
         address: dto.address?.trim(),
         city: dto.city?.trim(),
+        municipalityCode: dto.municipalityCode?.trim() ?? null,
+        countryCode: dto.countryCode?.trim() ?? 'CO',
+        tributeCode: dto.tributeCode?.trim() ?? null,
+        responsibilities: dto.responsibilities ?? undefined,
         notes: dto.notes?.trim(),
         isActive: true,
         deletedAt: null,
@@ -167,7 +179,11 @@ export class CustomersService {
             ? { documentType: dto.documentType }
             : {}),
           ...(dto.documentNumber !== undefined
-            ? { documentNumber: dto.documentNumber.trim() }
+            ? { documentNumber: dto.documentNumber?.trim() ?? null }
+            : {}),
+          ...(dto.dv !== undefined ? { dv: dto.dv?.trim() ?? null } : {}),
+          ...(dto.legalOrganizationCode !== undefined
+            ? { legalOrganizationCode: dto.legalOrganizationCode ?? null }
             : {}),
           ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
           ...(dto.email !== undefined
@@ -177,6 +193,18 @@ export class CustomersService {
             ? { address: dto.address?.trim() }
             : {}),
           ...(dto.city !== undefined ? { city: dto.city?.trim() } : {}),
+          ...(dto.municipalityCode !== undefined
+            ? { municipalityCode: dto.municipalityCode?.trim() ?? null }
+            : {}),
+          ...(dto.countryCode !== undefined
+            ? { countryCode: dto.countryCode?.trim() ?? null }
+            : {}),
+          ...(dto.tributeCode !== undefined
+            ? { tributeCode: dto.tributeCode?.trim() ?? null }
+            : {}),
+          ...(dto.responsibilities !== undefined
+            ? { responsibilities: dto.responsibilities }
+            : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes?.trim() } : {}),
         },
       });
@@ -200,7 +228,11 @@ export class CustomersService {
           ? { documentType: dto.documentType }
           : {}),
         ...(dto.documentNumber !== undefined
-          ? { documentNumber: dto.documentNumber.trim() }
+          ? { documentNumber: dto.documentNumber?.trim() ?? null }
+          : {}),
+        ...(dto.dv !== undefined ? { dv: dto.dv?.trim() ?? null } : {}),
+        ...(dto.legalOrganizationCode !== undefined
+          ? { legalOrganizationCode: dto.legalOrganizationCode ?? null }
           : {}),
         ...(dto.phone !== undefined ? { phone: dto.phone?.trim() } : {}),
         ...(dto.email !== undefined
@@ -208,6 +240,18 @@ export class CustomersService {
           : {}),
         ...(dto.address !== undefined ? { address: dto.address?.trim() } : {}),
         ...(dto.city !== undefined ? { city: dto.city?.trim() } : {}),
+        ...(dto.municipalityCode !== undefined
+          ? { municipalityCode: dto.municipalityCode?.trim() ?? null }
+          : {}),
+        ...(dto.countryCode !== undefined
+          ? { countryCode: dto.countryCode?.trim() ?? null }
+          : {}),
+        ...(dto.tributeCode !== undefined
+          ? { tributeCode: dto.tributeCode?.trim() ?? null }
+          : {}),
+        ...(dto.responsibilities !== undefined
+          ? { responsibilities: dto.responsibilities }
+          : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() } : {}),
         updatedAt: new Date(),
       });

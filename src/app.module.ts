@@ -26,6 +26,7 @@ import { PublicInquiriesModule } from './public-inquiries/public-inquiries.modul
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SupabaseModule } from './common/supabase/supabase.module';
 import { DocumentAttachmentsModule } from './document-attachments/document-attachments.module';
+import { FactusModule } from './factus/factus.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { DocumentAttachmentsModule } from './document-attachments/document-attac
     PublicInquiriesModule,
     DashboardModule,
     DocumentAttachmentsModule,
+    FactusModule,
   ],
   providers: [
     {

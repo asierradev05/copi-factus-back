@@ -12,6 +12,8 @@ import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { EmailModule } from '../common/email/email.module';
+import { SupabaseModule } from '../common/supabase/supabase.module';
+import { FactusModule } from '../factus/factus.module';
 import { CustomersService } from '../customers/customers.service';
 import { ServicesService } from '../services/services.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -41,6 +43,8 @@ describe('Invoice Flow Integration', () => {
         PrismaModule,
         AuditModule,
         EmailModule,
+        SupabaseModule,
+        FactusModule,
       ],
       providers: [
         CustomersService,

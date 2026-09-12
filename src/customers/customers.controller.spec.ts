@@ -42,7 +42,7 @@ describe('CustomersController (extract-rut)', () => {
       buffer: Buffer.from('%PDF-1.4 fake'),
       mimetype: 'application/pdf',
       size: 100,
-    } as unknown as { buffer: Buffer; mimetype: string; size: number });
+    });
 
     expect(result.extracted).toEqual(mockExtracted);
     expect(extractRutFromPdf).toHaveBeenCalledTimes(1);
@@ -54,7 +54,7 @@ describe('CustomersController (extract-rut)', () => {
         buffer: Buffer.from('not a pdf'),
         mimetype: 'text/plain',
         size: 9,
-      } as unknown as { buffer: Buffer; mimetype: string; size: number }),
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -64,13 +64,19 @@ describe('CustomersController (extract-rut)', () => {
         buffer: Buffer.alloc(6 * 1024 * 1024),
         mimetype: 'application/pdf',
         size: 6 * 1024 * 1024,
-      } as unknown as { buffer: Buffer; mimetype: string; size: number }),
+      }),
     ).rejects.toThrow(PayloadTooLargeException);
   });
 
   it('rechaza si no hay archivo', async () => {
     await expect(
-      controller.extractRut(undefined as unknown as { buffer: Buffer; mimetype: string; size: number }),
+      controller.extractRut(
+        undefined as unknown as {
+          buffer: Buffer;
+          mimetype: string;
+          size: number;
+        },
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 });

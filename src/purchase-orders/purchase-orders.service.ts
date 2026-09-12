@@ -98,9 +98,7 @@ export class PurchaseOrdersService {
       where: { id: dto.quoteId },
     });
     if (!quote) {
-      throw new BadRequestException(
-        'La cotización seleccionada no existe.',
-      );
+      throw new BadRequestException('La cotización seleccionada no existe.');
     }
     if (quote.status !== QuoteStatus.APROBADA) {
       throw new BadRequestException(

@@ -23,7 +23,9 @@ export class DocumentAttachmentsService {
   }
 
   async findOne(id: string) {
-    const attachment = await this.prisma.documentAttachment.findUnique({ where: { id } });
+    const attachment = await this.prisma.documentAttachment.findUnique({
+      where: { id },
+    });
     if (!attachment) throw new NotFoundException('Adjunto no encontrado.');
     return attachment;
   }
@@ -57,7 +59,10 @@ export class DocumentAttachmentsService {
 
   async remove(id: string) {
     const attachment = await this.findOne(id);
-    await this.supabase.getClient().storage.from(this.BUCKET).remove([attachment.filePath]);
+    await this.supabase
+      .getClient()
+      .storage.from(this.BUCKET)
+      .remove([attachment.filePath]);
     return this.prisma.documentAttachment.delete({ where: { id } });
   }
 }

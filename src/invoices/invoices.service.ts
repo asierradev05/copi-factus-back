@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -15,6 +16,7 @@ import { Decimal } from '@prisma/client/runtime/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/email/email.service';
+import { SupabaseService } from '../common/supabase/supabase.service';
 import { generateInvoicePdf } from '../common/pdf/invoice-pdf.util';
 import type {
   CompanyPdfModel,
@@ -29,6 +31,11 @@ import {
 } from '../common/utils/money.util';
 import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
 import { useInMemoryFallback } from '../common/utils/fallback.util';
+import { FactusAuthService } from '../factus/factus-auth.service';
+import { FactusAdapterService } from '../factus/factus-adapter.service';
+import { FactusEmissionService } from '../factus/factus-emission.service';
+import { FactusApiException } from '../factus/factus-api.exception';
+import { generateReferenceCode } from '../factus/factus-utils';
 import {
   CreateInvoiceDto,
   FilterInvoiceDto,
@@ -37,10 +44,16 @@ import {
 
 @Injectable()
 export class InvoicesService {
+  private readonly logger = new Logger(InvoicesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly email: EmailService,
+    private readonly factusAuth: FactusAuthService,
+    private readonly factusAdapter: FactusAdapterService,
+    private readonly factusEmission: FactusEmissionService,
+    private readonly supabase: SupabaseService,
   ) {}
 
   async findAll(filters: FilterInvoiceDto) {
@@ -268,6 +281,194 @@ export class InvoicesService {
       );
     }
 
+    if (this.factusAuth.isConfigured()) {
+      return this.emitViaFactus(existing, actorId);
+    }
+    return this.emitLocal(existing, actorId);
+  }
+
+  private async emitViaFactus(existing: any, actorId: string) {
+    try {
+      const full = await this.prisma.invoice.findUnique({
+        where: { id: existing.id },
+        include: {
+          customer: true,
+          items: { include: { product: true } },
+          payments: true,
+        },
+      });
+      if (!full) throw new NotFoundException('Factura no encontrada.');
+
+      const resolution = await this.prisma.resolution.findFirst({
+        where: {
+          type: 'FACTURA',
+          isActive: true,
+          numberingRangeId: { not: null },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!resolution) {
+        throw new BadRequestException(
+          'No hay una resolución sincronizada con Factus para facturar. Sincroniza el rango de la resolución primero.',
+        );
+      }
+
+      let invoice = full;
+      if (!full.referenceCode) {
+        invoice = await this.prisma.invoice.update({
+          where: { id: full.id },
+          data: { referenceCode: generateReferenceCode(full.id) },
+          include: {
+            customer: true,
+            items: { include: { product: true } },
+            payments: true,
+          },
+        });
+      }
+
+      const company = await this.prisma.companySettings.findUnique({
+        where: { id: 'default' },
+      });
+      if (!company) {
+        throw new BadRequestException(
+          'Configuración de empresa no encontrada. Completa los datos del emisor.',
+        );
+      }
+
+      const payload = this.factusEmission.buildPayload(
+        invoice,
+        resolution,
+        company,
+      );
+
+      let response: any;
+      try {
+        response = await this.factusAdapter.validateBills([payload]);
+      } catch (err) {
+        if (err instanceof FactusApiException && err.isAlreadyExists()) {
+          throw new BadRequestException(
+            'La factura ya fue enviada a DIAN previamente. Verifica su estado en Factus.',
+          );
+        }
+        throw new BadRequestException(
+          err instanceof Error
+            ? err.message
+            : 'Error al enviar la factura a la DIAN.',
+        );
+      }
+
+      const data = response?.data;
+      if (!data?.number) {
+        throw new BadRequestException(
+          'Factus no devolvió el número oficial de la factura.',
+        );
+      }
+
+      const links = data.links ?? {};
+      const { xmlPath, pdfPath } = await this.factusEmission
+        .archiveDocuments(
+          data.number,
+          await this.safeDownloadXml(data.number),
+          await this.safeDownloadPdf(data.number),
+        )
+        .catch(async (err) => {
+          this.logger?.error?.(
+            `Factus: no se pudo archivar documentos: ${(err as Error).message}`,
+          );
+          return { xmlPath: null, pdfPath: null };
+        });
+
+      const dianStatus = this.factusEmission.determineDianStatus(data);
+
+      const updated = await this.prisma.invoice.update({
+        where: { id: existing.id },
+        data: {
+          invoiceNumber: data.number,
+          factusNumber: data.number,
+          issueDate: new Date(),
+          status: InvoiceStatus.EMITIDA,
+          resolutionId: resolution.id,
+          resolutionNumber: resolution.resolutionNumber ?? null,
+          resolutionDate: resolution.dateFrom ?? new Date(),
+          ambient: resolution.ambient,
+          cufe: data.cufe,
+          dianStatus,
+          validatedAt: data.validated_at
+            ? new Date(data.validated_at)
+            : new Date(),
+          qrUrl: links.url_qr_code ?? null,
+          publicUrl: links.url_public ?? null,
+          graphicRepresentationUrl: links.url_graphic_representation ?? null,
+          xmlPath,
+          pdfPath,
+          factusPayload: data as Prisma.InputJsonValue,
+        },
+        include: { items: true, customer: true },
+      });
+
+      await this.prisma.resolution.update({
+        where: { id: resolution.id },
+        data: { next: { increment: 1 } },
+      });
+
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.EMIT,
+          entityType: 'Invoice',
+          entityId: existing.id,
+          oldValue: { status: existing.status },
+          newValue: data as Prisma.InputJsonValue,
+        })
+        .catch(() => {});
+
+      return updated;
+    } catch (err) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof BadRequestException
+      )
+        throw err;
+      if (!useInMemoryFallback()) throw err;
+      return this.emitLocal(existing, actorId);
+    }
+  }
+
+  private async safeDownloadXml(number: string): Promise<string | null> {
+    try {
+      return await this.factusAdapter.downloadBillXml(number);
+    } catch {
+      return null;
+    }
+  }
+
+  private async safeDownloadPdf(number: string): Promise<Buffer | null> {
+    try {
+      return await this.factusAdapter.downloadBillPdf(number);
+    } catch {
+      return null;
+    }
+  }
+
+  async getDianDocument(id: string, kind: 'xml' | 'pdf'): Promise<Buffer> {
+    const invoice = await this.findOne(id);
+    const path = kind === 'xml' ? invoice.xmlPath : invoice.pdfPath;
+    if (!path) {
+      throw new NotFoundException(
+        kind === 'xml'
+          ? 'El XML oficial aún no está disponible para esta factura.'
+          : 'El PDF oficial aún no está disponible para esta factura.',
+      );
+    }
+    try {
+      return await this.supabase.downloadAsBuffer('invoice-pdfs', path);
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+      throw new NotFoundException('El documento oficial no está disponible.');
+    }
+  }
+
+  private async emitLocal(existing: any, actorId: string) {
     try {
       const invoice = await this.prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw<
@@ -310,7 +511,7 @@ export class InvoicesService {
         });
 
         return tx.invoice.update({
-          where: { id },
+          where: { id: existing.id },
           data: {
             invoiceNumber,
             issueDate: new Date(),

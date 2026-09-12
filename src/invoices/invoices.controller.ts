@@ -68,6 +68,36 @@ export class InvoicesController {
     return new StreamableFile(buffer);
   }
 
+  @Get(':id/dian-xml')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR, UserRole.CONSULTA)
+  async getDianXml(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const buffer = await this.invoicesService.getDianDocument(id, 'xml');
+    res.set({
+      'Content-Type': 'application/xml',
+      'Content-Disposition': 'attachment; filename="factura.xml"',
+      'Content-Length': String(buffer.length),
+    });
+    return new StreamableFile(buffer);
+  }
+
+  @Get(':id/dian-pdf')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR, UserRole.CONSULTA)
+  async getDianPdf(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const buffer = await this.invoicesService.getDianDocument(id, 'pdf');
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="factura-oficial.pdf"',
+      'Content-Length': String(buffer.length),
+    });
+    return new StreamableFile(buffer);
+  }
+
   @Post(':id/send-email')
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
   sendEmail(
