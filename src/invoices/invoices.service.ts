@@ -18,7 +18,8 @@ import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/email/email.service';
 import { renderBrandedEmail } from '../common/email/branded-email.template';
 import { SupabaseService } from '../common/supabase/supabase.service';
-import { generateInvoicePdf } from '../common/pdf/invoice-pdf.util';
+import { generateInvoicePdf, STATUS_LABELS, DIAN_LABELS } from '../common/pdf/invoice-pdf.util';
+import { getBrandLogoBase64, BRAND } from '../common/pdf/brand-assets.util';
 import type {
   CompanyPdfModel,
   InvoicePdfModel,
@@ -42,6 +43,13 @@ import {
   FilterInvoiceDto,
   SendInvoiceEmailDto,
 } from './dto/invoice.dto';
+
+export const BRAND_CONTACT = {
+  address: BRAND.address,
+  phone: BRAND.phone,
+  email: BRAND.email,
+  website: BRAND.website,
+} as const;
 
 @Injectable()
 export class InvoicesService {
@@ -606,6 +614,10 @@ export class InvoicesService {
     return { invoice: model, company };
   }
 
+  private async brandLogo(company: CompanyPdfModel): Promise<string | null> {
+    return company.logoBase64 ?? getBrandLogoBase64();
+  }
+
   private async downloadImageAsBase64(
     url: string | null | undefined,
   ): Promise<string | null> {
@@ -666,9 +678,11 @@ export class InvoicesService {
     if (invoice.qrUrl) {
       pdfModel.qrBase64 = await this.downloadImageAsBase64(invoice.qrUrl);
     }
+    const logoBase64 = await this.brandLogo(company);
+    company.logoBase64 = logoBase64;
     const pdfBuffer = await generateInvoicePdf(pdfModel, company);
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
+    const statusLabel = STATUS_LABELS[invoice.status] ?? invoice.status;
     const formatMoney = (v: unknown) =>
       Number(v ?? 0).toLocaleString('es-CO', {
         minimumFractionDigits: 2,
@@ -676,9 +690,15 @@ export class InvoicesService {
       });
     const formatDate = (v?: Date | string | null) =>
       v ? new Date(v).toLocaleDateString('es-CO') : '-';
-    const dianStatusLabel =
-      invoice.dianStatus && invoice.dianStatus !== 'NO_APLICA'
-        ? invoice.dianStatus
+    const dianBlock: { label: string; value: string }[] | undefined =
+      invoice.cufe
+        ? [
+            { label: 'CUFE', value: invoice.cufe },
+            {
+              label: 'Estado DIAN',
+              value: DIAN_LABELS[invoice.dianStatus] ?? invoice.dianStatus,
+            },
+          ]
         : undefined;
 
     const html = renderBrandedEmail({
@@ -693,13 +713,10 @@ export class InvoicesService {
       ],
       totalLabel: 'Total',
       totalValue: formatMoney(invoice.total),
-      statusLabel: dianStatusLabel,
-      dianBlock:
-        dianStatusLabel && invoice.cufe
-          ? [{ label: 'CUFE', value: invoice.cufe }, { label: 'Estado DIAN', value: dianStatusLabel }]
-          : undefined,
-      linkUrl: `${frontendUrl}/invoices/${id}`,
-      linkLabel: 'Ver factura',
+      statusLabel,
+      dianBlock,
+      logoBase64,
+      contact: BRAND_CONTACT,
     });
 
     const result = await this.email.sendMail({

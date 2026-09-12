@@ -6,6 +6,7 @@ import type {
   TDocumentDefinitions,
   TFontDictionary,
 } from 'pdfmake/interfaces';
+import { getBrandLogoBase64, BRAND } from './brand-assets.util';
 interface PdfmakePrinter {
   setFonts(fonts: TFontDictionary): void;
   createPdf(document: TDocumentDefinitions): TCreatedPdf;
@@ -98,7 +99,7 @@ function formatDate(value?: Date | string | null): string {
   return date.toLocaleDateString('es-CO');
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   BORRADOR: 'Borrador',
   EMITIDA: 'Emitida',
   PARCIALMENTE_PAGADA: 'Parcialmente pagada',
@@ -107,7 +108,7 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELADA: 'Cancelada',
 };
 
-const DIAN_LABELS: Record<string, string> = {
+export const DIAN_LABELS: Record<string, string> = {
   NO_APLICA: 'No aplica',
   PENDIENTE: 'Pendiente',
   ENVIADA: 'Enviada',
@@ -132,88 +133,93 @@ function headerLeftStack(company: CompanyPdfModel): Content[] {
     {
       text: company.legalName || company.name,
       bold: true,
-      fontSize: 14,
-      margin: [0, 0, 0, 2],
-    },
-    {
-      text: company.name,
-      fontSize: 10,
-      color: '#555555',
-      margin: [0, 0, 0, 2],
+      fontSize: 12,
+      color: '#356ea8',
+      margin: [0, 0, 0, 1],
     },
   ];
 
   if (company.taxId) {
-    stack.push({ text: `NIT: ${company.taxId}`, fontSize: 9 });
+    stack.push({
+      text: `NIT ${company.taxId}`,
+      fontSize: 9,
+      color: '#555555',
+      margin: [0, 0, 0, 3],
+    });
   }
-  if (company.address) {
-    stack.push({ text: company.address, fontSize: 9 });
-  }
-  if (company.city) {
-    stack.push({ text: company.city, fontSize: 9 });
-  }
-  if (company.phone) {
-    stack.push({ text: `Tel: ${company.phone}`, fontSize: 9 });
-  }
-  if (company.email) {
-    stack.push({ text: company.email, fontSize: 9 });
-  }
+  stack.push({ text: BRAND.address, fontSize: 9, color: '#356ea8' });
+  stack.push({ text: BRAND.phone, fontSize: 9, color: '#ec1c24' });
+  stack.push({
+    text: `${BRAND.email} - ${BRAND.website}`,
+    fontSize: 9,
+    bold: true,
+    color: '#2f7ec8',
+    margin: [0, 2, 0, 0],
+  });
   return stack;
 }
 
+function statusColor(status: string): string {
+  if (status === 'PAGADA' || status === 'PARCIALMENTE_PAGADA') return '#1a7f37';
+  if (status === 'VENCIDA' || status === 'CANCELADA') return '#ec1c24';
+  return '#356ea8';
+}
+
 function headerRightStack(invoice: InvoicePdfModel): Content[] {
-  const stack: Content[] = [
+  const boxCell = (
+    text: string,
+    alignment: 'left' | 'right' | 'center' = 'left',
+  ) => ({ text, alignment, fontSize: 9 });
+
+  return [
     {
       table: {
-        widths: ['*'],
+        widths: [72, '*'],
         body: [
           [
             {
-              text: invoice.invoiceNumber
-                ? `FACTURA ${invoice.invoiceNumber}`
-                : 'FACTURA',
+              text: 'FACTURA',
+              colSpan: 2,
               bold: true,
-              fontSize: 17,
-              color: '#ec1c24',
+              fontSize: 16,
               alignment: 'center',
+              color: '#ec1c24',
+              fillColor: '#f7e2c2',
+            },
+            {},
+          ],
+          [
+            { text: 'No. FACTURA', bold: true, fontSize: 8 },
+            {
+              text: invoice.invoiceNumber,
+              alignment: 'right',
+              bold: true,
+              fontSize: 10,
+              color: '#ec1c24',
             },
           ],
-        ],
+          [{ text: 'FECHA', bold: true, fontSize: 8 }, boxCell(formatDate(invoice.issueDate), 'right')],
+          [{ text: 'VENCE', bold: true, fontSize: 8 }, boxCell(formatDate(invoice.dueDate), 'right')],
+          [
+            { text: 'ESTADO', bold: true, fontSize: 8 },
+            {
+              text: STATUS_LABELS[invoice.status] ?? invoice.status,
+              alignment: 'right',
+              bold: true,
+              fontSize: 9,
+              color: statusColor(invoice.status),
+            },
+          ],
+        ] as Content[][],
       },
       layout: {
-        hLineWidth: () => 1,
-        vLineWidth: () => 1,
-        hLineColor: () => '#2f7ec8',
-        vLineColor: () => '#2f7ec8',
+        hLineColor: () => '#222222',
+        vLineColor: () => '#222222',
+        hLineWidth: () => 0.8,
+        vLineWidth: () => 0.8,
       },
-      margin: [0, 0, 0, 6],
-    },
-    {
-      columns: [
-        { text: 'Estado', bold: true, fontSize: 9, width: 70 },
-        {
-          text: STATUS_LABELS[invoice.status] ?? invoice.status,
-          fontSize: 9,
-        },
-      ],
-      margin: [0, 0, 0, 2],
-    },
-    {
-      columns: [
-        { text: 'Fecha', bold: true, fontSize: 9, width: 70 },
-        { text: formatDate(invoice.issueDate), fontSize: 9 },
-      ],
-      margin: [0, 0, 0, 2],
-    },
-    {
-      columns: [
-        { text: 'Vence', bold: true, fontSize: 9, width: 70 },
-        { text: formatDate(invoice.dueDate), fontSize: 9 },
-      ],
-      margin: [0, 0, 0, 2],
     },
   ];
-  return stack;
 }
 
 function customerLeftStack(invoice: InvoicePdfModel): Content[] {
@@ -363,11 +369,23 @@ export function buildDocDefinition(
     totalRow('SALDO', invoice.balance, invoice.balance > 0),
   ];
 
-  const content: Content[] = [
+  const content: Content[] = [];
+
+  if (company.logoBase64) {
+    content.push({
+      image: company.logoBase64,
+      width: 150,
+      height: 46,
+      alignment: 'center',
+      margin: [0, 0, 0, 8],
+    });
+  }
+
+  content.push(
     {
       columns: headerColumns,
       columnGap: 10,
-      margin: [0, 0, 0, 6],
+      margin: [0, 0, 0, 4],
     },
     {
       text: 'SOMOS UNA EMPRESA DIRECTA (SIN INTERMEDIARIOS)',
@@ -391,7 +409,7 @@ export function buildDocDefinition(
       ],
       margin: [0, 0, 0, 10],
     },
-    sectionHeader('INFORMACIÓN DEL CLIENTE'),
+    sectionHeader('CLIENTE'),
     {
       columns: [
         { width: '*', stack: customerLeftStack(invoice) },
@@ -450,7 +468,7 @@ export function buildDocDefinition(
       ],
       margin: [0, 0, 0, 12],
     },
-  ];
+  );
 
   if (
     invoice.factusNumber ||
@@ -614,7 +632,7 @@ export function buildDocDefinition(
     {
       columns: [
         {
-          text: `${company.name} · ${company.address ?? ''} · Tel: ${company.phone ?? ''} · ${company.email ?? ''}`,
+          text: `${company.name || BRAND.name} · ${BRAND.address} · ${BRAND.phone} · ${BRAND.email} · ${BRAND.website}`,
           fontSize: 8,
           color: '#356ea8',
           alignment: 'center',
@@ -662,6 +680,11 @@ export async function generateInvoicePdf(
   company: CompanyPdfModel,
 ): Promise<Buffer> {
   pdfmake.setFonts(DEFAULT_FONTS);
-  const doc = pdfmake.createPdf(buildDocDefinition(invoice, company));
+  const doc = pdfmake.createPdf(
+    buildDocDefinition(invoice, {
+      ...company,
+      logoBase64: company.logoBase64 ?? (await getBrandLogoBase64()),
+    }),
+  );
   return doc.getBuffer();
 }

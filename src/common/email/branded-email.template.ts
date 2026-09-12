@@ -3,6 +3,13 @@ export interface BrandedEmailRow {
   value: string;
 }
 
+export interface BrandedEmailContact {
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
 export interface BrandedEmailParams {
   companyName: string;
   title: string;
@@ -12,8 +19,8 @@ export interface BrandedEmailParams {
   totalValue?: string;
   statusLabel?: string;
   dianBlock?: BrandedEmailRow[];
-  linkUrl?: string;
-  linkLabel?: string;
+  logoBase64?: string | null;
+  contact?: BrandedEmailContact;
 }
 
 export function escapeHtml(
@@ -43,8 +50,8 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
     totalValue,
     statusLabel,
     dianBlock,
-    linkUrl,
-    linkLabel,
+    logoBase64,
+    contact,
   } = params;
 
   const rowsHtml = rows
@@ -82,10 +89,21 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
       </div>`
     : '';
 
-  const linkHtml =
-    linkUrl && linkLabel
-      ? `<a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:${BRAND_BLUE};color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;margin-top:20px;">${escapeHtml(linkLabel)}</a>`
-      : '';
+  const logoHtml = logoBase64
+    ? `
+      <tr>
+        <td style="background:#ffffff;padding:20px 28px 14px;text-align:center;border-bottom:4px solid ${BRAND_RED};">
+          <img src="${escapeHtml(logoBase64)}" alt="Logo" style="display:block;margin:0 auto;max-height:64px;max-width:220px;width:auto;height:64px;object-fit:contain;">
+        </td>
+      </tr>`
+    : '';
+
+  const contactLines: string[] = [];
+  if (contact?.address) contactLines.push(escapeHtml(contact.address));
+  if (contact?.phone) contactLines.push(escapeHtml(contact.phone));
+  const webEmail: string[] = [];
+  if (contact?.email) webEmail.push(escapeHtml(contact.email));
+  if (contact?.website) webEmail.push(escapeHtml(contact.website));
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -94,6 +112,7 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
       <tr>
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+            ${logoHtml}
             <tr>
               <td style="background:linear-gradient(90deg, ${BRAND_BLUE}, ${BRAND_DARK});padding:20px 28px;border-bottom:4px solid ${BRAND_RED};">
                 <div style="color:#ffffff;font-size:18px;font-weight:700;">${escapeHtml(companyName)}</div>
@@ -109,12 +128,17 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
                   ${totalHtml}
                 </table>
                 ${dianHtml}
-                <div align="center">${linkHtml}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 28px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center;">
-                ${escapeHtml(companyName)} · Documento generado electrónicamente. Por favor no responda este correo.
+              <td style="background:#f6f7f9;padding:18px 28px;border-top:4px solid ${BRAND_BLUE};">
+                <div style="text-align:center;font-size:12px;color:${TEXT_COLOR};">
+                  ${contactLines.length ? `${contactLines.join('<br/>')}<br/>` : ''}
+                  ${webEmail.length ? `<span style="font-weight:600;color:${BRAND_BLUE};">${webEmail.join(' · ')}</span><br/>` : ''}
+                </div>
+                <div style="text-align:center;font-size:11px;color:#8a94a6;margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">
+                  ${escapeHtml(companyName)} · Documento generado electrónicamente. Por favor no responda este correo.
+                </div>
               </td>
             </tr>
           </table>

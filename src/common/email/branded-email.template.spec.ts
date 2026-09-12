@@ -51,6 +51,32 @@ describe('renderBrandedEmail', () => {
     expect(html).toContain('CUFE');
     expect(html).toContain('VALIDADA');
   });
+
+  it('incluye el logo y la información de contacto cuando se pasan', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      logoBase64: 'data:image/png;base64,LOGO',
+      contact: {
+        address: 'Cra 28 # 10-70',
+        phone: '310 248 6169',
+        email: 'copigraficassierra@gmail.com',
+        website: 'www.copigraficassierra.com',
+      },
+    });
+
+    expect(html).toContain('data:image/png;base64,LOGO');
+    expect(html).toContain('Cra 28 # 10-70');
+    expect(html).toContain('310 248 6169');
+    expect(html).toContain('copigraficassierra@gmail.com');
+    expect(html).toContain('www.copigraficassierra.com');
+  });
+
+  it('no genera enlaces de acceso (uso interno de la aplicación)', () => {
+    const html = renderBrandedEmail(base);
+    expect(html).not.toContain('<a href');
+    expect(html).not.toContain('Ver factura');
+    expect(html).not.toContain('http://');
+  });
 });
 
 describe('escapeHtml', () => {

@@ -19,6 +19,7 @@ import { EmailService } from '../common/email/email.service';
 import { renderBrandedEmail } from '../common/email/branded-email.template';
 import { generateQuotePdf, type QuotePdfModel } from '../common/pdf/quote-pdf.util';
 import type { CompanyPdfModel } from '../common/pdf/invoice-pdf.util';
+import { getBrandLogoBase64, BRAND } from '../common/pdf/brand-assets.util';
 import {
   CreateQuoteDto,
   FilterQuoteDto,
@@ -243,13 +244,14 @@ export class QuotesService {
     }
 
     const company = await this.getCompanyPdfModel();
+    const logoBase64 = company.logoBase64 ?? (await getBrandLogoBase64());
+    company.logoBase64 = logoBase64;
     const pdfBuffer = await generateQuotePdf(
       this.toPdfModel(quote),
       company,
       quote.status,
     );
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
     const formatMoney = (v: unknown) =>
       Number(v ?? 0).toLocaleString('es-CO', {
         minimumFractionDigits: 2,
@@ -257,6 +259,13 @@ export class QuotesService {
       });
     const formatDate = (v?: Date | string | null) =>
       v ? new Date(v).toLocaleDateString('es-CO') : '-';
+
+    const QUOTE_STATUS_LABELS: Record<string, string> = {
+      PENDIENTE: 'Pendiente',
+      APROBADA: 'Aprobada',
+      RECHAZADA: 'Rechazada',
+      FACTURADA: 'Facturada',
+    };
 
     const html = renderBrandedEmail({
       companyName: company.name,
@@ -272,8 +281,14 @@ export class QuotesService {
       ],
       totalLabel: 'Total',
       totalValue: formatMoney(quote.total),
-      linkUrl: `${frontendUrl}/quotes/${id}`,
-      linkLabel: 'Ver cotización',
+      statusLabel: QUOTE_STATUS_LABELS[quote.status] ?? quote.status,
+      logoBase64,
+      contact: {
+        address: BRAND.address,
+        phone: BRAND.phone,
+        email: BRAND.email,
+        website: BRAND.website,
+      },
     });
 
     const result = await this.email.sendMail({
