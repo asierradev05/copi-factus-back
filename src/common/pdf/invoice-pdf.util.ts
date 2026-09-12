@@ -374,8 +374,7 @@ export function buildDocDefinition(
   if (company.logoBase64) {
     content.push({
       image: company.logoBase64,
-      width: 150,
-      height: 46,
+      fit: [170, 48],
       alignment: 'center',
       margin: [0, 0, 0, 8],
     });

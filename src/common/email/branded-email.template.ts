@@ -89,7 +89,9 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
       </div>`
     : '';
 
-  const logoHtml = logoBase64
+  const MAX_LOGO_CHARS = 200_000;
+
+const logoHtml = logoBase64 && logoBase64.length < MAX_LOGO_CHARS
     ? `
       <tr>
         <td style="background:#ffffff;padding:20px 28px 14px;text-align:center;border-bottom:4px solid ${BRAND_RED};">

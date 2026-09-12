@@ -9,6 +9,9 @@ export const BRAND = {
     'Transferencia Bancolombia Cuenta de Ahorros # 17407613040 A nombre de Angel Mesías Sierra',
 } as const;
 
+export const BRAND_LOGO_PATH = '/images/LogoCOPI-small.png';
+const MAX_LOGO_CHARS = 200_000;
+
 let cachedLogo: string | null = null;
 let logoPromise: Promise<string | null> | null = null;
 
@@ -27,14 +30,16 @@ export function getBrandLogoBase64(): Promise<string | null> {
 
 async function loadBrandLogo(): Promise<string | null> {
   const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
-  const url = `${baseUrl}/images/LogoCOPI.png`;
+  const url = `${baseUrl}${BRAND_LOGO_PATH}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     const buffer = Buffer.from(await res.arrayBuffer());
-    return `data:image/png;base64,${buffer.toString('base64')}`;
+    const dataUri = `data:image/png;base64,${buffer.toString('base64')}`;
+    if (dataUri.length > MAX_LOGO_CHARS) return null;
+    return dataUri;
   } catch {
     return null;
   } finally {

@@ -71,6 +71,15 @@ describe('renderBrandedEmail', () => {
     expect(html).toContain('www.copigraficassierra.com');
   });
 
+  it('no incrusta un logo demasiado grande (evita que el cliente recorte el cuerpo)', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      logoBase64: 'data:image/png;base64,' + 'A'.repeat(300000),
+    });
+
+    expect(html).not.toContain('data:image/');
+  });
+
   it('no genera enlaces de acceso (uso interno de la aplicación)', () => {
     const html = renderBrandedEmail(base);
     expect(html).not.toContain('<a href');
