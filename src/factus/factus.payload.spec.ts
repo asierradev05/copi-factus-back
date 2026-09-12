@@ -48,28 +48,35 @@ const makeInput = (): FactusBuildInput => ({
 });
 
 describe('buildBillPayload', () => {
-  it('arma el bloque de ítems con tax_amount calculado a 2 decimales', () => {
+  it('arma el bloque de ítems con taxes del contrato V2', () => {
     const payload = buildBillPayload(makeInput()) as any;
     expect(payload.document).toBe('01');
     expect(payload.operation_type).toBe('10');
     expect(payload.numbering_range_id).toBe(15);
     expect(payload.reference_code).toBe('REF1234567890');
     const item = payload.items[0];
+    expect(item.code_reference).toBe('P001');
     expect(item.quantity).toBe(10);
     expect(item.price).toBe(100);
-    expect(item.tax).toEqual({ type: 'IVA', percentage: 19, tax_amount: 190 });
+    expect(item.taxes).toEqual([
+      { code: '01', rate: '19.00', tax_amount: '190.00' },
+    ]);
   });
 
-  it('mapea legal org a persona juridica/natural', () => {
+  it('mapea legal org a persona juridica/natural y responsibilities a códigos', () => {
     const payload = buildBillPayload(makeInput()) as any;
     expect(payload.customer.type).toBe('persona natural');
+    expect(payload.customer.legal_organization_code).toBe('2');
+    expect(payload.customer.responsibilities).toEqual(['R-99-PN']);
+    expect(payload.company.legal_organization_code).toBe('1');
+    expect(payload.company.responsibilities).toEqual(['O-13']);
   });
 
-  it('arma payment_details con forma y monto', () => {
+  it('arma payment_details con forma y monto (contrato V2)', () => {
     const payload = buildBillPayload(makeInput()) as any;
     expect(payload.payment_details).toEqual([
       {
-        payment_method: '10',
+        payment_method_code: '10',
         payment_form: '2',
         amount: 0,
         payment_due_date: '2026-10-11',

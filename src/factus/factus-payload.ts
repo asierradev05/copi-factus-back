@@ -1,6 +1,9 @@
 import type { FactusBuildInput } from './factus-types';
 import { round2 } from './factus-utils';
 
+const toCodes = (rs: Array<{ code: string }>): string[] =>
+  (rs ?? []).map((r) => r.code);
+
 export function buildBillPayload(
   input: FactusBuildInput,
 ): Record<string, unknown> {
@@ -9,14 +12,20 @@ export function buildBillPayload(
   const items = input.items.map((item) => {
     const taxAmount = round2(item.quantity * item.price * (item.taxRate / 100));
     return {
-      code: item.code,
+      code_reference: item.code,
       name: item.name,
       ...(item.description ? { description: item.description } : {}),
       quantity: item.quantity,
       price: item.price,
       unit_measure_code: item.unitMeasureCode ?? '94',
       standard_code: item.standardCode ?? '999',
-      tax: { type: 'IVA', percentage: item.taxRate, tax_amount: taxAmount },
+      taxes: [
+        {
+          code: '01',
+          rate: item.taxRate.toFixed(2),
+          tax_amount: taxAmount.toFixed(2),
+        },
+      ],
       ...(item.discount && item.discount > 0
         ? { discount: { type: '02', value: round2(item.discount) } }
         : {}),
@@ -25,7 +34,7 @@ export function buildBillPayload(
 
   const payment_details = [
     {
-      payment_method: input.paymentMethodDian,
+      payment_method_code: input.paymentMethodDian,
       payment_form: input.paymentForm,
       amount:
         input.paymentForm === '1'
@@ -44,7 +53,7 @@ export function buildBillPayload(
     operation_type: '10',
     cash_rounding_amount: round2(input.cashRoundingAmount ?? 0),
     company: {
-      legal_organization_code: company.legalOrganizationCode,
+      legal_organization_code: String(company.legalOrganizationCode ?? 1),
       company: company.legalName,
       trade_name: company.tradeName ?? company.name,
       email: company.email ?? '',
@@ -54,7 +63,7 @@ export function buildBillPayload(
       municipality_code: company.municipalityCode ?? '11001',
       economic_activity: company.economicActivity ?? '',
       tribute_code: company.tributeCode ?? '01',
-      responsibilities: company.responsibilities,
+      responsibilities: toCodes(company.responsibilities),
     },
     customer: {
       type:
@@ -62,17 +71,17 @@ export function buildBillPayload(
           ? 'persona juridica'
           : 'persona natural',
       identification_document_code: customer.documentTypeDian,
-      identification_number: customer.identificationNumber,
+      identification: customer.identificationNumber,
       ...(customer.dv ? { dv: customer.dv } : {}),
-      name: customer.name,
+      names: customer.name,
       ...(customer.address ? { address: customer.address } : {}),
       ...(customer.email ? { email: customer.email } : {}),
       ...(customer.phone ? { phone: customer.phone } : {}),
       country_code: customer.countryCode ?? 'CO',
       municipality_code: customer.municipalityCode ?? '11001',
-      legal_organization_code: customer.legalOrganizationCode,
+      legal_organization_code: String(customer.legalOrganizationCode),
       tribute_code: customer.tributeCode,
-      responsibilities: customer.responsibilities,
+      responsibilities: toCodes(customer.responsibilities),
     },
     items,
     payment_details,
