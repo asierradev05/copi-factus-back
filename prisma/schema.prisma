@@ -85,6 +85,7 @@ enum PurchaseOrderStatus {
 
 enum DeliveryOrderStatus {
   PENDIENTE
+  PARCIALMENTE_ENTREGADA
   ENTREGADA
   CANCELADA
 }
@@ -120,6 +121,7 @@ model Profile {
   quotesCreated         Quote[]              @relation("QuoteCreator")
   purchaseOrdersCreated PurchaseOrder[]      @relation("PurchaseOrderCreator")
   deliveryOrdersCreated DeliveryOrder[]      @relation("DeliveryOrderCreator")
+  deliveryOrderDeliveries DeliveryOrderDelivery[] @relation("DeliveryOrderDeliveryCreator")
   receivedDocumentsCreated ReceivedDocument[] @relation("ReceivedDocumentCreator")
   publicInquiriesHandled PublicInquiry[] @relation("PublicInquiryHandler")
   attachmentsUploaded DocumentAttachment[] @relation("AttachmentUploader")
@@ -476,6 +478,7 @@ model Quote {
   total       Decimal     @default(0) @db.Decimal(12, 2)
   status      QuoteStatus @default(PENDIENTE)
   notes       String?
+  emailSentAt DateTime?   @map("email_sent_at")
   createdById String?     @map("created_by")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
@@ -540,10 +543,27 @@ model DeliveryOrder {
   invoice   Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   createdBy Profile?        @relation("DeliveryOrderCreator", fields: [createdById], references: [id])
+  deliveries DeliveryOrderDelivery[]
 
   @@index([customerId])
   @@index([status])
   @@map("delivery_orders")
+}
+
+model DeliveryOrderDelivery {
+  id              String   @id @default(uuid())
+  deliveryOrderId String   @map("delivery_order_id")
+  deliveredAt     DateTime @map("delivered_at")
+  items           Json
+  notes           String?
+  createdById     String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  createdBy     Profile?      @relation("DeliveryOrderDeliveryCreator", fields: [createdById], references: [id])
+
+  @@index([deliveryOrderId])
+  @@map("delivery_order_deliveries")
 }
 
 model Resolution {

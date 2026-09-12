@@ -10,6 +10,7 @@ export enum AttachmentEntityType {
   QUOTE = 'quote',
   PURCHASE_ORDER = 'purchase_order',
   DELIVERY_ORDER = 'delivery_order',
+  DELIVERY_ORDER_DELIVERY = 'delivery_order_delivery',
   INVOICE = 'invoice',
 }
 
