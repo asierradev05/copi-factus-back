@@ -82,6 +82,19 @@ export class SupabaseService {
     return Buffer.from(arrayBuffer);
   }
 
+  async uploadBuffer(
+    bucket: string,
+    path: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<string> {
+    const { error } = await this.getClient()
+      .storage.from(bucket)
+      .upload(path, buffer, { contentType, upsert: true });
+    if (error) throw error;
+    return path;
+  }
+
   isConfigured(): boolean {
     return this.client !== null;
   }
