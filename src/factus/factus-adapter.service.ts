@@ -64,7 +64,17 @@ export class FactusAdapterService {
     if (!res.ok) {
       throw await this.buildError(res, await res.text());
     }
-    return res.text();
+    const raw = await res.text();
+    try {
+      const parsed = JSON.parse(raw);
+      const b64 = parsed?.data?.xml_base_64_encoded;
+      if (typeof b64 === 'string') {
+        return Buffer.from(b64, 'base64').toString('utf-8');
+      }
+    } catch {
+      return raw;
+    }
+    return raw;
   }
 
   private async request(
