@@ -73,6 +73,12 @@ export class UpdateQuoteStatusDto {
   status!: QuoteStatus;
 }
 
+export class SendQuoteEmailDto {
+  @IsOptional()
+  @IsString()
+  to?: string;
+}
+
 export class FilterQuoteDto {
   @IsOptional()
   @IsUUID()

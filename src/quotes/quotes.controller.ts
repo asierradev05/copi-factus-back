@@ -13,6 +13,7 @@ import { QuotesService } from './quotes.service';
 import {
   CreateQuoteDto,
   FilterQuoteDto,
+  SendQuoteEmailDto,
   UpdateQuoteStatusDto,
 } from './dto/quote.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -61,5 +62,15 @@ export class QuotesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.quotes.convertToPurchaseOrder(id, user.id);
+  }
+
+  @Post(':id/send-email')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  sendEmail(
+    @Param('id') id: string,
+    @Body() dto: SendQuoteEmailDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.quotes.sendEmail(id, dto, user.id);
   }
 }

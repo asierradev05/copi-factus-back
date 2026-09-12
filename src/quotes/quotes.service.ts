@@ -13,9 +13,16 @@ import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { nextDocumentNumber } from '../common/utils/document-sequence.util';
 import { toDecimal } from '../common/utils/money.util';
+import { useInMemoryFallback } from '../common/utils/fallback.util';
+import { globalStore } from '../database/in-memory-store';
+import { EmailService } from '../common/email/email.service';
+import { renderBrandedEmail } from '../common/email/branded-email.template';
+import { generateQuotePdf, type QuotePdfModel } from '../common/pdf/quote-pdf.util';
+import type { CompanyPdfModel } from '../common/pdf/invoice-pdf.util';
 import {
   CreateQuoteDto,
   FilterQuoteDto,
+  SendQuoteEmailDto,
   UpdateQuoteStatusDto,
 } from './dto/quote.dto';
 
@@ -24,6 +31,7 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly email: EmailService,
   ) {}
 
   async findAll(query: FilterQuoteDto) {
@@ -222,6 +230,149 @@ export class QuotesService {
       .catch(() => {});
 
     return po;
+  }
+
+  async sendEmail(id: string, dto: SendQuoteEmailDto, userId: string) {
+    const quote = await this.findOne(id);
+    const to = (dto.to ?? '').trim() || quote.customer?.email || null;
+
+    if (!to) {
+      throw new BadRequestException(
+        'Debe indicar un correo de destino o registrar el correo del cliente.',
+      );
+    }
+
+    const company = await this.getCompanyPdfModel();
+    const pdfBuffer = await generateQuotePdf(
+      this.toPdfModel(quote),
+      company,
+      quote.status,
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
+    const formatMoney = (v: unknown) =>
+      Number(v ?? 0).toLocaleString('es-CO', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    const formatDate = (v?: Date | string | null) =>
+      v ? new Date(v).toLocaleDateString('es-CO') : '-';
+
+    const html = renderBrandedEmail({
+      companyName: company.name,
+      title: `Cotización ${quote.quoteNumber}`,
+      subtitle: `Hola${quote.customer ? ` ${quote.customer.name}` : ''}, adjuntamos su cotización.`,
+      rows: [
+        { label: 'Número', value: quote.quoteNumber },
+        { label: 'Cliente', value: quote.customer?.name ?? '-' },
+        { label: 'Fecha', value: formatDate(quote.issueDate) },
+        ...(quote.validUntil
+          ? [{ label: 'Vigencia', value: formatDate(quote.validUntil) }]
+          : []),
+      ],
+      totalLabel: 'Total',
+      totalValue: formatMoney(quote.total),
+      linkUrl: `${frontendUrl}/quotes/${id}`,
+      linkLabel: 'Ver cotización',
+    });
+
+    const result = await this.email.sendMail({
+      to,
+      subject: `Cotización ${quote.quoteNumber} - ${company.name}`,
+      html,
+      attachments: [
+        { filename: `${quote.quoteNumber}.pdf`, content: pdfBuffer },
+      ],
+    });
+
+    try {
+      await this.prisma.quote.update({
+        where: { id },
+        data: { emailSentAt: new Date() },
+      });
+    } catch {
+      quote.emailSentAt = new Date();
+    }
+
+    await this.audit
+      .log({
+        userId,
+        action: AuditAction.UPDATE,
+        entityType: 'Quote',
+        entityId: id,
+        newValue: { emailSentAt: true, to },
+      })
+      .catch(() => {});
+
+    return {
+      success: true,
+      messageId: result.messageId,
+      to,
+      simulated: result.simulated,
+    };
+  }
+
+  private async getCompanyPdfModel(): Promise<CompanyPdfModel> {
+    try {
+      const settings = await this.prisma.companySettings.findUnique({
+        where: { id: 'default' },
+      });
+
+      if (settings) {
+        return {
+          name: settings.name,
+          legalName: settings.legalName,
+          taxId: settings.taxId,
+          address: settings.address,
+          phone: settings.phone,
+          email: settings.email,
+          city: settings.city,
+          logoUrl: settings.logoUrl,
+        };
+      }
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+    }
+
+    const settings = globalStore.companySettings;
+    return {
+      name: settings.name ?? 'CopiGráfica Sierra',
+      legalName: settings.legalName ?? settings.name ?? 'CopiGráfica Sierra',
+      taxId: settings.taxId ?? null,
+      address: settings.address ?? null,
+      phone: settings.phone ?? null,
+      email: settings.email ?? null,
+      city: settings.city ?? null,
+      logoUrl: settings.logoUrl ?? null,
+    };
+  }
+
+  private toPdfModel(quote: any): QuotePdfModel {
+    const items = (quote.items ?? []) as Array<{
+      description?: string;
+      quantity?: number;
+      unitPrice?: number;
+      taxRate?: number;
+    }>;
+
+    return {
+      quoteNumber: quote.quoteNumber,
+      issuedAt: quote.issueDate ?? null,
+      validUntil: quote.validUntil ?? null,
+      customerName: quote.customer?.name ?? null,
+      customerDocument: quote.customer?.documentNumber ?? null,
+      address: quote.customer?.address ?? null,
+      lines: items.map((it) => ({
+        description: it.description ?? '-',
+        quantity: Number(it.quantity ?? 0),
+        unitPrice: Number(it.unitPrice ?? 0),
+        taxRate: it.taxRate ?? 0,
+      })),
+      subtotal: Number(quote.subtotal ?? 0),
+      taxTotal: Number(quote.taxTotal ?? 0),
+      total: Number(quote.total ?? 0),
+      notes: quote.notes ?? null,
+    };
   }
 
   private computeItems(items: CreateQuoteDto['items']) {
