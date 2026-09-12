@@ -16,6 +16,7 @@ import { Decimal } from '@prisma/client/runtime/client';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/email/email.service';
+import { renderBrandedEmail } from '../common/email/branded-email.template';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { generateInvoicePdf } from '../common/pdf/invoice-pdf.util';
 import type {
@@ -668,23 +669,38 @@ export class InvoicesService {
     const pdfBuffer = await generateInvoicePdf(pdfModel, company);
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
-    const esc = (v: string | null | undefined) =>
-      (v ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    const html = `
-      <div style="font-family:Arial, sans-serif; color:#222;">
-        <h2>${esc(company.name)}</h2>
-        <p>Cordial saludo${customer ? `, <b>${esc(customer.name)}</b>` : ''}.</p>
-        <p>Adjuntamos la factura de venta <b>${esc(invoice.invoiceNumber)}</b>
-        por un total de <b>${Number(invoice.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</b>.</p>
-        <p>Puede consultarla en línea: <a href="${esc(frontendUrl)}/invoices/${id}">Ver factura</a></p>
-        <p style="color:#888; font-size:12px;">Este mensaje fue generado automáticamente por ${esc(company.name)}.</p>
-      </div>
-    `;
+    const formatMoney = (v: unknown) =>
+      Number(v ?? 0).toLocaleString('es-CO', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    const formatDate = (v?: Date | string | null) =>
+      v ? new Date(v).toLocaleDateString('es-CO') : '-';
+    const dianStatusLabel =
+      invoice.dianStatus && invoice.dianStatus !== 'NO_APLICA'
+        ? invoice.dianStatus
+        : undefined;
+
+    const html = renderBrandedEmail({
+      companyName: company.name,
+      title: `Factura ${invoice.invoiceNumber}`,
+      subtitle: `Hola${customer ? ` ${customer.name}` : ''}, adjuntamos su factura.`,
+      rows: [
+        { label: 'Número', value: invoice.invoiceNumber },
+        { label: 'Cliente', value: customer?.name ?? '-' },
+        { label: 'Fecha', value: formatDate(invoice.issueDate) },
+        { label: 'Vencimiento', value: formatDate(invoice.dueDate) },
+      ],
+      totalLabel: 'Total',
+      totalValue: formatMoney(invoice.total),
+      statusLabel: dianStatusLabel,
+      dianBlock:
+        dianStatusLabel && invoice.cufe
+          ? [{ label: 'CUFE', value: invoice.cufe }, { label: 'Estado DIAN', value: dianStatusLabel }]
+          : undefined,
+      linkUrl: `${frontendUrl}/invoices/${id}`,
+      linkLabel: 'Ver factura',
+    });
 
     const result = await this.email.sendMail({
       to: targetEmail,
