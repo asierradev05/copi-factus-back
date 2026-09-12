@@ -352,7 +352,7 @@ export class InvoicesService {
 
       let response: any;
       try {
-        response = await this.factusAdapter.validateBills([payload]);
+        response = await this.factusAdapter.validateBills(payload);
       } catch (err) {
         if (err instanceof FactusApiException && err.isAlreadyExists()) {
           throw new BadRequestException(

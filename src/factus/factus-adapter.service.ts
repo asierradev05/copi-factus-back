@@ -36,8 +36,8 @@ export class FactusAdapterService {
   getAcquirer(query: Params): Promise<any> {
     return this.request('GET', '/v2/dian/acquirer', undefined, query);
   }
-  validateBills(payloads: unknown[]): Promise<any> {
-    return this.request('POST', '/v2/bills/validate', payloads);
+  validateBills(payload: unknown): Promise<any> {
+    return this.request('POST', '/v2/bills/validate', payload);
   }
   listBills(params?: Params): Promise<any> {
     return this.request('GET', '/v2/bills', undefined, params);
