@@ -24,6 +24,7 @@ import type {
   CompanyPdfModel,
   InvoicePdfModel,
 } from '../common/pdf/invoice-pdf.util';
+import { buildQrDataUrl } from '../common/pdf/qr.util';
 import { generateCufe } from '../common/utils/cufe.util';
 import { globalStore } from '../database/in-memory-store';
 import {
@@ -610,33 +611,13 @@ export class InvoicesService {
     const company = await this.getCompanyPdfModel();
     const model = this.toPdfModel(invoice);
     if (invoice.qrUrl) {
-      model.qrBase64 = await this.downloadImageAsBase64(invoice.qrUrl);
+      model.qrBase64 = await buildQrDataUrl(invoice.qrUrl);
     }
     return { invoice: model, company };
   }
 
   private async brandLogo(company: CompanyPdfModel): Promise<string | null> {
     return company.logoBase64 ?? getBrandLogoBase64();
-  }
-
-  private async downloadImageAsBase64(
-    url: string | null | undefined,
-  ): Promise<string | null> {
-    if (!url) return null;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const buffer = Buffer.from(await res.arrayBuffer());
-      const mime =
-        buffer.subarray(0, 3).toString('hex') === 'ffd8ff'
-          ? 'image/jpeg'
-          : buffer.subarray(1, 4).toString('ascii') === 'PNG'
-            ? 'image/png'
-            : 'image/png';
-      return `data:${mime};base64,${buffer.toString('base64')}`;
-    } catch {
-      return null;
-    }
   }
 
   async getPdfBuffer(id: string): Promise<Buffer> {
@@ -677,7 +658,7 @@ export class InvoicesService {
     const company = await this.getCompanyPdfModel();
     const pdfModel = this.toPdfModel(invoice);
     if (invoice.qrUrl) {
-      pdfModel.qrBase64 = await this.downloadImageAsBase64(invoice.qrUrl);
+      pdfModel.qrBase64 = await buildQrDataUrl(invoice.qrUrl);
     }
     const logoBase64 = await this.brandLogo(company);
     company.logoBase64 = logoBase64;
