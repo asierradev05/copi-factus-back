@@ -13,6 +13,7 @@ import { DeliveryOrdersService } from './delivery-orders.service';
 import {
   CreateDeliveryOrderDto,
   FilterDeliveryOrderDto,
+  RegisterDeliveryDto,
   UpdateDeliveryOrderStatusDto,
 } from './dto/delivery-order.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -57,6 +58,22 @@ export class DeliveryOrdersController {
   @Post(':id/invoice')
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
   convertToInvoice(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.deliveryOrders.convertToInvoice(id, user.id);
+    return this.deliveryOrders.syncInvoiceFromDeliveries(id, user.id);
+  }
+
+  @Post(':id/deliveries')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  registerDelivery(
+    @Param('id') id: string,
+    @Body() dto: RegisterDeliveryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.deliveryOrders.registerDelivery(id, dto, user.id);
+  }
+
+  @Post(':id/mark-delivered')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  markDelivered(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.deliveryOrders.markFullyDelivered(id, user.id);
   }
 }

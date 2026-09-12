@@ -63,6 +63,45 @@ export class UpdateDeliveryOrderStatusDto {
   status!: DeliveryOrderStatus;
 }
 
+export class RegisterDeliveryItemDto {
+  @IsString()
+  @IsNotEmpty({ message: 'La descripción del ítem es obligatoria.' })
+  description!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  quantity!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  taxRate?: number;
+}
+
+export class RegisterDeliveryDto {
+  @IsOptional()
+  @IsDateString()
+  deliveredAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RegisterDeliveryItemDto)
+  items!: RegisterDeliveryItemDto[];
+}
+
 export class FilterDeliveryOrderDto {
   @IsOptional()
   @IsUUID()
