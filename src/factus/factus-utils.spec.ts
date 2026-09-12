@@ -5,6 +5,7 @@ import {
   mapResolutionTypeToDian,
   mapPaymentMethodToDian,
   round2,
+  parseFactusDate,
 } from './factus-utils';
 
 describe('factus-utils', () => {
@@ -35,5 +36,15 @@ describe('factus-utils', () => {
   it('redondea a 2 decimales', () => {
     expect(round2(1.999)).toBe(2);
     expect(round2(10.005)).toBe(10.01);
+  });
+
+  it('parsea fecha Factus (DD-MM-YYYY hh:mm:ss AM/PM) en hora Colombia', () => {
+    const d = parseFactusDate('12-09-2026 12:36:54 PM');
+    expect(d).not.toBeNull();
+    expect(d!.toISOString()).toBe('2026-09-12T17:36:54.000Z');
+    const am = parseFactusDate('12-09-2026 01:05:09 AM');
+    expect(am!.toISOString()).toBe('2026-09-12T06:05:09.000Z');
+    expect(parseFactusDate(null)).toBeNull();
+    expect(parseFactusDate('no-valido')).toBeNull();
   });
 });

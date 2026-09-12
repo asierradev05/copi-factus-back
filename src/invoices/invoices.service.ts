@@ -37,7 +37,7 @@ import { FactusAuthService } from '../factus/factus-auth.service';
 import { FactusAdapterService } from '../factus/factus-adapter.service';
 import { FactusEmissionService } from '../factus/factus-emission.service';
 import { FactusApiException } from '../factus/factus-api.exception';
-import { generateReferenceCode } from '../factus/factus-utils';
+import { generateReferenceCode, parseFactusDate } from '../factus/factus-utils';
 import {
   CreateInvoiceDto,
   FilterInvoiceDto,
@@ -402,12 +402,13 @@ export class InvoicesService {
           ambient: resolution.ambient,
           cufe: data.cufe,
           dianStatus,
-          validatedAt: data.validated_at
-            ? new Date(data.validated_at)
-            : new Date(),
-          qrUrl: links.url_qr_code ?? null,
-          publicUrl: links.url_public ?? null,
-          graphicRepresentationUrl: links.url_graphic_representation ?? null,
+          validatedAt: parseFactusDate(data.validated_at) ?? new Date(),
+          qrUrl: links.qr ?? links.url_qr_code ?? null,
+          publicUrl: links.public_url ?? links.url_public ?? null,
+          graphicRepresentationUrl:
+            links.graphic_representation ??
+            links.url_graphic_representation ??
+            null,
           xmlPath,
           pdfPath,
           factusPayload: data as Prisma.InputJsonValue,

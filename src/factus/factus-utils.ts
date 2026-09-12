@@ -4,6 +4,28 @@ export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+export function parseFactusDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const m =
+    /^(\d{2})-(\d{2})-(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/i.exec(
+      value.trim(),
+    );
+  if (m) {
+    let hour = Number(m[4]);
+    const minute = Number(m[5]);
+    const second = Number(m[6]);
+    const isPm = m[7].toUpperCase() === 'PM';
+    if (isPm && hour < 12) hour += 12;
+    if (!isPm && hour === 12) hour = 0;
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = Number(m[3]);
+    return new Date(Date.UTC(year, month - 1, day, hour, minute, second) + 5 * 3600000);
+  }
+  const fallback = new Date(value);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
 export function generateReferenceCode(invoiceId: string): string {
   const hex = invoiceId.replace(/-/g, '').toUpperCase();
   return `REF${hex.slice(0, 12)}`;
