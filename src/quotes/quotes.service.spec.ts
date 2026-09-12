@@ -4,7 +4,7 @@ import { DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
-import { EmailModule } from '../common/email/email.module';
+import { EmailService } from '../common/email/email.service';
 import { QuotesService } from './quotes.service';
 
 describe('QuotesService (envío de cotización)', () => {
@@ -20,13 +20,19 @@ describe('QuotesService (envío de cotización)', () => {
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        PrismaModule,
-        AuditModule,
-        EmailModule,
+      imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuditModule],
+      providers: [
+        QuotesService,
+        {
+          provide: EmailService,
+          useValue: {
+            sendMail: jest.fn().mockResolvedValue({
+              messageId: 'dev-quote-test',
+              simulated: true,
+            }),
+          },
+        },
       ],
-      providers: [QuotesService],
     }).compile();
 
     prisma = module.get(PrismaService);
