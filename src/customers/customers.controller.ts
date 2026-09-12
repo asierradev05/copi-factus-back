@@ -86,7 +86,9 @@ export class CustomersController {
     }
     const required = ['name', 'documentNumber'];
     const extracted = await extractRutFromPdf(file.buffer);
-    const missing = required.filter((f) => !extracted[f as keyof typeof extracted]);
+    const missing = required.filter(
+      (f) => !extracted[f as keyof typeof extracted],
+    );
     if (missing.length > 0) {
       throw new BadRequestException(
         'No se pudieron reconocer los datos del RUT. Verifica que sea un PDF del RUT generado digitalmente (no escaneado).',

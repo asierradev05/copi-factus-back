@@ -388,8 +388,7 @@ export class InvoicesService {
           issueDate: new Date(),
           status: InvoiceStatus.EMITIDA,
           resolutionId: resolution.id,
-          resolutionNumber:
-            resolution.resolutionNumber ?? null,
+          resolutionNumber: resolution.resolutionNumber ?? null,
           resolutionDate: resolution.dateFrom ?? new Date(),
           ambient: resolution.ambient,
           cufe: data.cufe,
@@ -399,8 +398,7 @@ export class InvoicesService {
             : new Date(),
           qrUrl: links.url_qr_code ?? null,
           publicUrl: links.url_public ?? null,
-          graphicRepresentationUrl:
-            links.url_graphic_representation ?? null,
+          graphicRepresentationUrl: links.url_graphic_representation ?? null,
           xmlPath,
           pdfPath,
           factusPayload: data as Prisma.InputJsonValue,
@@ -426,7 +424,10 @@ export class InvoicesService {
 
       return updated;
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof BadRequestException)
+      if (
+        err instanceof NotFoundException ||
+        err instanceof BadRequestException
+      )
         throw err;
       if (!useInMemoryFallback()) throw err;
       return this.emitLocal(existing, actorId);

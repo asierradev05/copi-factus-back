@@ -59,8 +59,8 @@ export class FactusEmissionService {
     const legalOrg = customer?.legalOrganizationCode ?? 2;
     const dv =
       customer?.documentType === 'NIT'
-        ? customer?.dv ?? calculateDianDv(customer?.documentNumber ?? '')
-        : customer?.dv ?? '0';
+        ? (customer?.dv ?? calculateDianDv(customer?.documentNumber ?? ''))
+        : (customer?.dv ?? '0');
 
     const responsibilities: Array<{ code: string }> =
       customer?.responsibilities?.length > 0
@@ -156,12 +156,7 @@ export class FactusEmissionService {
     }
     if (pdf) {
       const path = `dian/${factusNumber}/factura.pdf`;
-      await this.supabase.uploadBuffer(
-        BUCKET,
-        path,
-        pdf,
-        'application/pdf',
-      );
+      await this.supabase.uploadBuffer(BUCKET, path, pdf, 'application/pdf');
       pdfPath = path;
     }
     return { xmlPath, pdfPath };

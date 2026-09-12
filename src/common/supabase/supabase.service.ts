@@ -33,18 +33,20 @@ export class SupabaseService {
   }
 
   ensureBucket(name: string): Promise<void> {
-    return this.getClient().storage.getBucket(name).then(({ error }) => {
-      if (!error) {
-        return;
-      }
-      return this.getClient()
-        .storage.createBucket(name, { public: false })
-        .then(({ error: createError }) => {
-          if (createError) {
-            throw new Error(createError.message);
-          }
-        });
-    });
+    return this.getClient()
+      .storage.getBucket(name)
+      .then(({ error }) => {
+        if (!error) {
+          return;
+        }
+        return this.getClient()
+          .storage.createBucket(name, { public: false })
+          .then(({ error: createError }) => {
+            if (createError) {
+              throw new Error(createError.message);
+            }
+          });
+      });
   }
 
   async presignUploadUrl(bucket: string, path: string): Promise<string> {
@@ -66,7 +68,9 @@ export class SupabaseService {
       .storage.from(bucket)
       .createSignedUrl(path, expiresIn);
     if (error || !data) {
-      throw new Error(error?.message ?? 'No se pudo firmar la URL de descarga.');
+      throw new Error(
+        error?.message ?? 'No se pudo firmar la URL de descarga.',
+      );
     }
     return data.signedUrl;
   }

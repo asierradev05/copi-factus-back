@@ -108,10 +108,7 @@ export class FactusAdapterService {
     return url.toString();
   }
 
-  private async buildError(
-    res: Response,
-    text: string,
-  ): Promise<FactusApiException> {
+  private buildError(res: Response, text: string): FactusApiException {
     let raw: any = null;
     let messages: string[] = [];
     try {

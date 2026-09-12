@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -26,8 +35,14 @@ export class DocumentAttachmentsController {
 
   @Post('presign')
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
-  presign(@Body() body: { fileName: string; entityType: string; entityId: string }) {
-    return this.service.presignUpload(body.fileName, body.entityType, body.entityId);
+  presign(
+    @Body() body: { fileName: string; entityType: string; entityId: string },
+  ) {
+    return this.service.presignUpload(
+      body.fileName,
+      body.entityType,
+      body.entityId,
+    );
   }
 
   @Post()

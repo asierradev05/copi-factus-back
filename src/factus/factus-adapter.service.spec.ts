@@ -56,7 +56,7 @@ describe('FactusAdapterService', () => {
   });
 
   it('lanza FactusApiException con mensajes concatenados ante 422', async () => {
-    globalThis.fetch = (async () =>
+    globalThis.fetch = async () =>
       new Response(
         JSON.stringify({
           status_code: 422,
@@ -66,7 +66,7 @@ describe('FactusAdapterService', () => {
           ],
         }),
         { status: 422, headers: { 'Content-Type': 'application/json' } },
-      )) as typeof globalThis.fetch;
+      );
 
     const svc = new FactusAdapterService(authOf('ACCESS'));
     await expect(svc.validateBills([{}])).rejects.toThrow(FactusApiException);
@@ -76,7 +76,7 @@ describe('FactusAdapterService', () => {
   });
 
   it('marca already exists', async () => {
-    globalThis.fetch = (async () =>
+    globalThis.fetch = async () =>
       new Response(
         JSON.stringify({
           status_code: 422,
@@ -85,7 +85,7 @@ describe('FactusAdapterService', () => {
           ],
         }),
         { status: 422, headers: { 'Content-Type': 'application/json' } },
-      )) as typeof globalThis.fetch;
+      );
 
     const svc = new FactusAdapterService(authOf('ACCESS'));
     await expect(svc.validateBills([{}])).rejects.toMatchObject({

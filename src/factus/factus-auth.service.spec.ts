@@ -25,7 +25,7 @@ describe('FactusAuthService', () => {
   const build = (fetchImpl: typeof globalThis.fetch) => {
     globalThis.fetch = fetchImpl;
     const cfg = new ConfigService(makeEnv('x'));
-    service = new FactusAuthService(cfg as any);
+    service = new FactusAuthService(cfg);
   };
 
   it('obtiene token con grant_type=password', async () => {
@@ -91,7 +91,7 @@ describe('FactusAuthService', () => {
 
   it('isConfigured es false sin credenciales', () => {
     const cfg = new ConfigService({});
-    service = new FactusAuthService(cfg as any);
+    service = new FactusAuthService(cfg);
     expect(service.isConfigured()).toBe(false);
   });
 });

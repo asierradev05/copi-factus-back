@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, PublicInquiryStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -64,7 +61,11 @@ export class PublicInquiriesService {
     return inquiry;
   }
 
-  async updateStatus(id: string, dto: UpdatePublicInquiryStatusDto, userId: string) {
+  async updateStatus(
+    id: string,
+    dto: UpdatePublicInquiryStatusDto,
+    userId: string,
+  ) {
     await this.findOne(id);
     return this.prisma.publicInquiry.update({
       where: { id },

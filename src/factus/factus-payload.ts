@@ -7,9 +7,7 @@ export function buildBillPayload(
   const { customer, company } = input;
 
   const items = input.items.map((item) => {
-    const taxAmount = round2(
-      item.quantity * item.price * (item.taxRate / 100),
-    );
+    const taxAmount = round2(item.quantity * item.price * (item.taxRate / 100));
     return {
       code: item.code,
       name: item.name,
