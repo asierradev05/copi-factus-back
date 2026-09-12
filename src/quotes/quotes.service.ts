@@ -76,6 +76,12 @@ export class QuotesService {
       );
     }
 
+    if (dto.items.some((i) => Number(i.unitPrice) <= 0)) {
+      throw new BadRequestException(
+        'El valor unitario de cada ítem debe ser mayor a 0.',
+      );
+    }
+
     const customer = await this.prisma.customer.findUnique({
       where: { id: dto.customerId },
     });

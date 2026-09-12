@@ -30,7 +30,7 @@ export class CreateQuoteItemDto {
 
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(0.01, { message: 'El valor unitario debe ser mayor a 0.' })
   unitPrice!: number;
 
   @IsOptional()
