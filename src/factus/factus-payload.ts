@@ -39,9 +39,13 @@ export function buildBillPayload(
       amount:
         input.paymentForm === '1'
           ? round2(input.total)
-          : round2(input.paidAmount),
-      ...(input.dueDate
-        ? { payment_due_date: input.dueDate.toISOString().slice(0, 10) }
+          : Math.max(round2(input.paidAmount) || 0.01, 0.01),
+      ...(input.paymentForm === '2'
+        ? {
+            due_date: (input.dueDate ?? new Date(Date.now() + 30 * 86400000))
+              .toISOString()
+              .slice(0, 10),
+          }
         : {}),
     },
   ];

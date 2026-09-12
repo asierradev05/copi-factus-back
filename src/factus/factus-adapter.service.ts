@@ -113,13 +113,21 @@ export class FactusAdapterService {
     let messages: string[] = [];
     try {
       raw = JSON.parse(text);
-      messages = Array.isArray(raw?.error)
-        ? raw.error
-            .map((e: { message?: string }) => e?.message ?? '')
-            .filter(Boolean)
-        : raw?.message
-          ? [raw.message]
-          : [];
+      const data = raw?.data;
+      if (data && typeof data.errors === 'object' && data.errors !== null) {
+        messages = Object.entries(data.errors as Record<string, string[]>).flatMap(
+          ([field, errs]) =>
+            Array.isArray(errs)
+              ? errs.map((e) => `${field}: ${e}`)
+              : [`${field}: ${String(errs)}`],
+        );
+      } else if (Array.isArray(raw?.error)) {
+        messages = raw.error
+          .map((e: { message?: string }) => e?.message ?? '')
+          .filter(Boolean);
+      } else if (raw?.message) {
+        messages = [raw.message];
+      }
     } catch {
       messages = [text || `HTTP ${res.status}`];
     }
