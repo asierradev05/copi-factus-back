@@ -598,7 +598,31 @@ export class InvoicesService {
   async getPdfContext(id: string) {
     const invoice = await this.findOne(id);
     const company = await this.getCompanyPdfModel();
-    return { invoice: this.toPdfModel(invoice), company };
+    const model = this.toPdfModel(invoice);
+    if (invoice.qrUrl) {
+      model.qrBase64 = await this.downloadImageAsBase64(invoice.qrUrl);
+    }
+    return { invoice: model, company };
+  }
+
+  private async downloadImageAsBase64(
+    url: string | null | undefined,
+  ): Promise<string | null> {
+    if (!url) return null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const mime =
+        buffer.subarray(0, 3).toString('hex') === 'ffd8ff'
+          ? 'image/jpeg'
+          : buffer.subarray(1, 4).toString('ascii') === 'PNG'
+            ? 'image/png'
+            : 'image/png';
+      return `data:${mime};base64,${buffer.toString('base64')}`;
+    } catch {
+      return null;
+    }
   }
 
   async getPdfBuffer(id: string): Promise<Buffer> {
@@ -637,10 +661,11 @@ export class InvoicesService {
     }
 
     const company = await this.getCompanyPdfModel();
-    const pdfBuffer = await generateInvoicePdf(
-      this.toPdfModel(invoice),
-      company,
-    );
+    const pdfModel = this.toPdfModel(invoice);
+    if (invoice.qrUrl) {
+      pdfModel.qrBase64 = await this.downloadImageAsBase64(invoice.qrUrl);
+    }
+    const pdfBuffer = await generateInvoicePdf(pdfModel, company);
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5175';
     const esc = (v: string | null | undefined) =>
@@ -719,6 +744,18 @@ export class InvoicesService {
       dianStatus: invoice.dianStatus ?? 'NO_APLICA',
       resolutionNumber: invoice.resolutionNumber ?? null,
       resolutionDate: invoice.resolutionDate ?? null,
+      referenceCode: invoice.referenceCode ?? null,
+      factusNumber: invoice.factusNumber ?? null,
+      publicUrl: invoice.publicUrl ?? null,
+      qrBase64: null,
+      paymentForm: invoice.paymentForm ? Number(invoice.paymentForm) : null,
+      paymentMethods: (invoice.payments ?? [])
+        .map((p: any) => p.paymentMethod)
+        .filter((v: unknown, i: number, a: unknown[]) => a.indexOf(v) === i),
+      cashRoundingAmount: invoice.cashRoundingAmount
+        ? Number(invoice.cashRoundingAmount)
+        : null,
+      dianErrors: invoice.factusPayload?.errors ?? [],
       customer: {
         name: customer?.name ?? 'Cliente',
         documentType: customer?.documentType ?? null,

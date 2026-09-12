@@ -53,6 +53,14 @@ export interface InvoicePdfModel {
   dianStatus: string;
   resolutionNumber?: string | null;
   resolutionDate?: Date | string | null;
+  referenceCode?: string | null;
+  factusNumber?: string | null;
+  publicUrl?: string | null;
+  qrBase64?: string | null;
+  paymentForm?: number | null;
+  paymentMethods?: string[];
+  cashRoundingAmount?: number | null;
+  dianErrors?: Array<{ message?: string }>;
   customer: {
     name: string;
     documentType?: string | null;
@@ -105,6 +113,18 @@ const DIAN_LABELS: Record<string, string> = {
   ENVIADA: 'Enviada',
   VALIDADA: 'Validada',
   RECHAZADA: 'Rechazada',
+};
+
+const PAYMENT_FORM_LABELS: Record<number, string> = {
+  1: 'Contado',
+  2: 'Crédito',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  EFECTIVO: 'Efectivo',
+  TRANSFERENCIA: 'Transferencia',
+  TARJETA: 'Tarjeta',
+  OTRO: 'Otro',
 };
 
 function headerLeftStack(company: CompanyPdfModel): Content[] {
@@ -240,7 +260,12 @@ function itemRow(item: InvoicePdfLineItem, index: number): Content[] {
     make(`${formatNumber(item.quantity)} und`, 'right'),
     make(formatNumber(item.unitPrice), 'right'),
     make(formatNumber(item.discount), 'right'),
-    make(`${formatNumber(item.taxRate)}%`, 'right'),
+    {
+      text: `${formatNumber(item.taxRate)}% · ${formatNumber(item.taxAmount)}`,
+      alignment: 'right',
+      fontSize: 8,
+      fillColor: fill,
+    },
     {
       text: formatNumber(item.total),
       alignment: 'right',
@@ -287,7 +312,13 @@ function sectionHeader(text: string): Content {
   };
 }
 
-function totalRow(label: string, value: number, highlight = false): Content[] {
+function totalRow(
+  label: string,
+  value: number,
+  highlight = false,
+  fillCream = false,
+): Content[] {
+  const fill = fillCream ? '#f7e2c2' : '#ffffff';
   return [
     {
       text: label,
@@ -296,6 +327,7 @@ function totalRow(label: string, value: number, highlight = false): Content[] {
       fontSize: highlight ? 12 : 11,
       margin: [0, 2, 0, 2],
       color: highlight ? '#ec1c24' : '#222222',
+      fillColor: fill,
     },
     {
       text: formatNumber(value),
@@ -304,11 +336,12 @@ function totalRow(label: string, value: number, highlight = false): Content[] {
       fontSize: highlight ? 13 : 11,
       margin: [0, 2, 0, 2],
       color: highlight ? '#ec1c24' : '#222222',
+      fillColor: fill,
     },
   ];
 }
 
-function buildDocDefinition(
+export function buildDocDefinition(
   invoice: InvoicePdfModel,
   company: CompanyPdfModel,
 ): TDocumentDefinitions {
@@ -325,7 +358,7 @@ function buildDocDefinition(
     currencyRow('Subtotal', invoice.subtotal),
     currencyRow('Descuentos', invoice.discountTotal),
     currencyRow('Impuestos', invoice.taxTotal),
-    totalRow('TOTAL A PAGAR', invoice.total, true),
+    totalRow('TOTAL A PAGAR', invoice.total, true, true),
     currencyRow('Abonado', invoice.paidAmount),
     totalRow('SALDO', invoice.balance, invoice.balance > 0),
   ];
@@ -371,7 +404,7 @@ function buildDocDefinition(
     {
       table: {
         headerRows: 1,
-        widths: [28, '*', 70, 65, 60, 50, 75],
+        widths: [24, '*', 55, 62, 50, 78, 72],
         body: [
           [
             { text: '#', style: 'tableHeader', alignment: 'center' },
@@ -419,48 +452,148 @@ function buildDocDefinition(
     },
   ];
 
-  if (invoice.resolutionNumber) {
-    const resolutionStack: Content[] = [
-      {
+  if (
+    invoice.factusNumber ||
+    invoice.resolutionNumber ||
+    invoice.paymentForm ||
+    (invoice.paymentMethods?.length ?? 0) > 0 ||
+    invoice.cashRoundingAmount
+  ) {
+    const dianLeft: Content[] = [];
+    if (invoice.resolutionNumber) {
+      dianLeft.push({
         text: 'RESOLUCIÓN DE FACTURACIÓN',
         bold: true,
         fontSize: 9,
         margin: [0, 0, 0, 2],
-      },
-      { text: `Número: ${invoice.resolutionNumber}`, fontSize: 9 },
-      {
+      });
+      dianLeft.push({
+        text: `Número: ${invoice.resolutionNumber}`,
+        fontSize: 9,
+      });
+      dianLeft.push({
         text: `Fecha: ${formatDate(invoice.resolutionDate)}`,
         fontSize: 9,
-      },
-    ];
+      });
+    }
 
-    const cufeStack: Content[] = [];
+    if (invoice.factusNumber) {
+      dianLeft.push({
+        text: 'INFORMACIÓN DIAN',
+        bold: true,
+        fontSize: 9,
+        color: '#2f7ec8',
+        margin: [0, 8, 0, 2],
+      });
+      dianLeft.push({
+        text: `Número oficial DIAN: ${invoice.factusNumber}`,
+        bold: true,
+        fontSize: 9,
+      });
+      if (invoice.referenceCode) {
+        dianLeft.push({
+          text: `Referencia: ${invoice.referenceCode}`,
+          fontSize: 8,
+          color: '#555555',
+        });
+      }
+      if (invoice.publicUrl) {
+        dianLeft.push({
+          text: invoice.publicUrl,
+          fontSize: 7.5,
+          color: '#2f7ec8',
+          margin: [0, 2, 0, 0],
+        });
+      }
+    }
+
+    const dianRight: Content[] = [];
     if (invoice.cufe) {
-      cufeStack.push({
+      dianRight.push({
         text: 'CUFE',
         bold: true,
         fontSize: 9,
         margin: [0, 0, 0, 2],
       });
-      cufeStack.push({
+      dianRight.push({
         text: invoice.cufe,
         fontSize: 7,
         color: '#333333',
       });
-      cufeStack.push({
-        text: `Estado DIAN: ${DIAN_LABELS[invoice.dianStatus] ?? invoice.dianStatus}`,
+      const dianLabel =
+        DIAN_LABELS[invoice.dianStatus] ?? invoice.dianStatus;
+      dianRight.push({
+        text: `Estado DIAN: ${dianLabel}`,
         fontSize: 9,
         margin: [0, 4, 0, 0],
       });
     }
+    if (invoice.qrBase64) {
+      dianRight.push({
+        image: invoice.qrBase64,
+        fit: [76, 76],
+        alignment: 'right',
+        margin: [0, 6, 0, 0],
+      });
+      dianRight.push({
+        text: 'Comuníquese · Código QR DIAN',
+        fontSize: 7,
+        color: '#777777',
+        alignment: 'right',
+      });
+    }
 
-    content.push({
+    const paymentParts: string[] = [];
+    if (invoice.paymentForm) {
+      paymentParts.push(
+        `Forma de pago: ${
+          PAYMENT_FORM_LABELS[invoice.paymentForm] ?? invoice.paymentForm
+        }`,
+      );
+    }
+    const methods = (invoice.paymentMethods ?? []).map(
+      (m) => PAYMENT_METHOD_LABELS[m] ?? m,
+    );
+    if (methods.length > 0) {
+      paymentParts.push(`Método(s): ${methods.join(', ')}`);
+    }
+    if (invoice.cashRoundingAmount) {
+      paymentParts.push(
+        `Redondeo a pesos: ${formatNumber(invoice.cashRoundingAmount)}`,
+      );
+    }
+
+    const block: Content = {
       columns: [
-        { width: '*', stack: resolutionStack },
-        { width: 'auto', stack: cufeStack },
+        { width: '*', stack: dianLeft },
+        { width: 'auto', alignment: 'right', stack: dianRight },
       ],
-      margin: [0, 0, 0, 12],
-    });
+      margin: [0, 0, 0, 6],
+    };
+
+    if (paymentParts.length > 0) {
+      content.push({
+        text: paymentParts.join('  ·  '),
+        fontSize: 8.5,
+        color: '#555555',
+        margin: [0, 2, 0, 6],
+      });
+    }
+
+    content.push(block);
+
+    if (invoice.dianStatus === 'RECHAZADA' && invoice.dianErrors?.length) {
+      content.push(
+        ...(invoice.dianErrors.map((e): Content => ({
+          text: `DIAN: ${e.message ?? 'Error no especificado.'}`,
+          fontSize: 8.5,
+          bold: true,
+          color: '#ec1c24',
+          margin: [0, 1, 0, 1],
+        })) as Content[]),
+      );
+      content.push({ text: '', margin: [0, 0, 0, 8] });
+    }
   }
 
   content.push(
