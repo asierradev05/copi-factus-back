@@ -47,6 +47,36 @@ export class SettingsService {
         ...(dto.invoiceNextNumber !== undefined
           ? { invoiceNextNumber: dto.invoiceNextNumber }
           : {}),
+        ...(dto.legalOrganizationCode !== undefined
+          ? { legalOrganizationCode: dto.legalOrganizationCode }
+          : {}),
+        ...(dto.tradeName !== undefined
+          ? { tradeName: dto.tradeName?.trim() }
+          : {}),
+        ...(dto.registrationCode !== undefined
+          ? { registrationCode: dto.registrationCode?.trim() }
+          : {}),
+        ...(dto.economicActivity !== undefined
+          ? { economicActivity: dto.economicActivity?.trim() }
+          : {}),
+        ...(dto.municipalityCode !== undefined
+          ? { municipalityCode: dto.municipalityCode?.trim() }
+          : {}),
+        ...(dto.countryCode !== undefined
+          ? { countryCode: dto.countryCode?.trim() }
+          : {}),
+        ...(dto.tributeCode !== undefined
+          ? { tributeCode: dto.tributeCode?.trim() }
+          : {}),
+        ...(dto.responsibilities !== undefined
+          ? {
+              responsibilities:
+                Array.isArray(dto.responsibilities) &&
+                dto.responsibilities.length > 0
+                  ? dto.responsibilities
+                  : undefined,
+            }
+          : {}),
       },
     });
 
