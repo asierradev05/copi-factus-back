@@ -18,7 +18,7 @@ import { DocumentAttachmentsService } from './document-attachments.service';
 import { CreateAttachmentDto } from './dto/create-attachment.dto';
 import { FilterAttachmentDto } from './dto/filter-attachment.dto';
 
-@Controller('api/attachments')
+@Controller('attachments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentAttachmentsController {
   constructor(private readonly service: DocumentAttachmentsService) {}
