@@ -9,7 +9,7 @@ export interface EmailAttachment {
   content: Buffer;
 }
 
-export const DEFAULT_EMAIL_FROM = 'facturacion@copigraficassierra.com';
+export const DEFAULT_EMAIL_FROM = 'servicios@copigraficassierra.com';
 
 @Injectable()
 export class EmailService {
