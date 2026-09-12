@@ -36,10 +36,7 @@ export function buildBillPayload(
     {
       payment_method_code: input.paymentMethodDian,
       payment_form: input.paymentForm,
-      amount:
-        input.paymentForm === '1'
-          ? round2(input.total)
-          : Math.max(round2(input.paidAmount) || 0.01, 0.01),
+      amount: round2(input.total),
       ...(input.paymentForm === '2'
         ? {
             due_date: (input.dueDate ?? new Date(Date.now() + 30 * 86400000))

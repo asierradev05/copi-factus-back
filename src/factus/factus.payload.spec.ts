@@ -78,7 +78,7 @@ describe('buildBillPayload', () => {
       {
         payment_method_code: '10',
         payment_form: '2',
-        amount: 0.01,
+        amount: 1190,
         due_date: '2026-10-11',
       },
     ]);
