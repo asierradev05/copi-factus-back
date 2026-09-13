@@ -657,32 +657,43 @@ export class InvoicesService {
 
     const dianStatus = this.factusEmission.determineDianStatus(data);
 
-    const result = await this.prisma.invoice.updateMany({
-      where: {
-        id: existing.id,
-        status: InvoiceStatus.BORRADOR,
-        referenceCode: note.referenceCode ?? null,
-      },
-      data: {
-        invoiceNumber: data.number,
-        factusNumber: data.number,
-        issueDate: new Date(),
-        status: InvoiceStatus.EMITIDA,
-        resolutionId: full.resolution?.id ?? null,
-        ambient: full.ambient,
-        cufe: data.cufe ?? null,
-        dianStatus,
-        validatedAt: parseFactusDate(data.validated_at) ?? new Date(),
-        qrUrl: links.qr ?? links.url_qr_code ?? null,
-        publicUrl: links.public_url ?? links.url_public ?? null,
-        graphicRepresentationUrl:
-          links.graphic_representation ??
-          links.url_graphic_representation ??
-          null,
-        xmlPath,
-        pdfPath,
-        factusPayload: data as Prisma.InputJsonValue,
-      },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.invoice.updateMany({
+        where: {
+          id: existing.id,
+          status: InvoiceStatus.BORRADOR,
+          referenceCode: note.referenceCode ?? null,
+        },
+        data: {
+          invoiceNumber: data.number,
+          factusNumber: data.number,
+          issueDate: new Date(),
+          status: InvoiceStatus.EMITIDA,
+          resolutionId: full.resolution?.id ?? null,
+          ambient: full.ambient,
+          cufe: data.cufe ?? null,
+          dianStatus,
+          validatedAt: parseFactusDate(data.validated_at) ?? new Date(),
+          qrUrl: links.qr ?? links.url_qr_code ?? null,
+          publicUrl: links.public_url ?? links.url_public ?? null,
+          graphicRepresentationUrl:
+            links.graphic_representation ??
+            links.url_graphic_representation ??
+            null,
+          xmlPath,
+          pdfPath,
+          factusPayload: data as Prisma.InputJsonValue,
+        },
+      });
+      if (rows.count === 0) return { count: 0 };
+
+      if (full.resolution?.id) {
+        await tx.resolution.update({
+          where: { id: full.resolution.id },
+          data: { next: { increment: 1 } },
+        });
+      }
+      return { count: rows.count };
     });
     if (result.count === 0) {
       throw new BadRequestException(
@@ -690,20 +701,11 @@ export class InvoicesService {
       );
     }
 
-    const updated = await this.prisma.invoice.findUnique({
+const updated = await this.prisma.invoice.findUnique({
       where: { id: existing.id },
       include: { items: true, customer: true },
     });
     if (!updated) throw new NotFoundException('Nota no encontrada.');
-
-    if (full.resolution?.id) {
-      await this.prisma.resolution
-        .update({
-          where: { id: full.resolution.id },
-          data: { next: { increment: 1 } },
-        })
-        .catch(() => {});
-    }
 
     const noteTotal = Number(data?.totals?.total ?? Number(full.total ?? 0));
     const sourceUnpaid = Number(source.paidAmount ?? 0) <= 0;
