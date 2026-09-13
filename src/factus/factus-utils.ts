@@ -70,6 +70,8 @@ export function mapResolutionTypeToDian(type: ResolutionType): string {
       return '21';
     case 'NOTA_CREDITO':
       return '22';
+    case 'NOTA_DEBITO':
+      return '23';
     default:
       return '24';
   }

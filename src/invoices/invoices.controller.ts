@@ -18,6 +18,7 @@ import {
   FilterInvoiceDto,
   SendInvoiceEmailDto,
 } from './dto/invoice.dto';
+import { CreateNoteDto } from './dto/note.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -51,6 +52,16 @@ export class InvoicesController {
   @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
   emit(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.invoicesService.emit(id, user.id);
+  }
+
+  @Post(':id/notes')
+  @Roles(UserRole.ADMIN, UserRole.FACTURADOR)
+  createNote(
+    @Param('id') id: string,
+    @Body() dto: CreateNoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.invoicesService.createNote(id, dto, user.id);
   }
 
   @Get(':id/pdf')

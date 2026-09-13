@@ -9,6 +9,7 @@ import {
   AuditAction,
   Ambient,
   DianStatus,
+  InvoiceKind,
   InvoiceStatus,
   Prisma,
 } from '@prisma/client';
@@ -42,18 +43,24 @@ import { FactusAuthService } from '../factus/factus-auth.service';
 import { FactusAdapterService } from '../factus/factus-adapter.service';
 import { FactusEmissionService } from '../factus/factus-emission.service';
 import { FactusApiException } from '../factus/factus-api.exception';
-import { generateReferenceCode, parseFactusDate } from '../factus/factus-utils';
+import {
+  generateReferenceCode,
+  mapResolutionTypeToDian,
+  parseFactusDate,
+} from '../factus/factus-utils';
 import {
   CreateInvoiceDto,
   FilterInvoiceDto,
   SendInvoiceEmailDto,
 } from './dto/invoice.dto';
+import { CreateNoteDto, CreateNoteKind } from './dto/note.dto';
 
 export const BRAND_CONTACT = {
   address: BRAND.address,
   phone: BRAND.phone,
   email: BRAND.email,
   website: BRAND.website,
+  whatsapp: '+57 310 258 6169',
 } as const;
 
 @Injectable()
@@ -176,6 +183,8 @@ export class InvoicesService {
           serviceLinks: { include: { service: true } },
           purchaseOrders: true,
           deliveryOrders: true,
+          redSource: { include: { customer: true } },
+          resolution: true,
         },
       });
 
@@ -286,6 +295,404 @@ export class InvoicesService {
     }
   }
 
+  async createNote(sourceId: string, dto: CreateNoteDto, actorId: string) {
+    const source = await this.findOne(sourceId);
+
+    if (source.documentKind && source.documentKind !== InvoiceKind.FACTURA) {
+      throw new BadRequestException(
+        'Solo se pueden generar notas desde una factura.',
+      );
+    }
+    if (!source.factusNumber) {
+      throw new BadRequestException(
+        'La factura aún no fue validada ante la DIAN. Emítela antes de generar la nota.',
+      );
+    }
+    if (source.status !== InvoiceStatus.EMITIDA) {
+      throw new BadRequestException(
+        'Solo se pueden generar notas sobre facturas emitidas.',
+      );
+    }
+
+    const kind =
+      dto.kind === CreateNoteKind.NOTA_DEBITO
+        ? InvoiceKind.NOTA_DEBITO
+        : InvoiceKind.NOTA_CREDITO;
+
+    const itemIds = dto.itemIds;
+    const selected =
+      itemIds && itemIds.length > 0
+        ? (source.items ?? []).filter((i: any) => itemIds.includes(i.id))
+        : (source.items ?? []);
+    if (!selected.length) {
+      throw new BadRequestException(
+        'La nota debe incluir al menos un ítem de la factura.',
+      );
+    }
+
+    const computedItems: Array<{
+      productId: string;
+      description: string;
+      quantity: Decimal;
+      unitPrice: Decimal;
+      discount: Decimal;
+      taxRate: Decimal;
+      subtotal: Decimal;
+      taxAmount: Decimal;
+      total: Decimal;
+    }> = selected.map((item: any) => {
+      const { subtotal, taxAmount, total } = calculateLineTotal(
+        Number(item.quantity ?? 0),
+        Number(item.unitPrice ?? 0),
+        Number(item.discount ?? 0),
+        Number(item.taxRate ?? 0),
+      );
+      return {
+        productId: item.productId,
+        description: String(item.description ?? '').trim(),
+        quantity: toDecimal(item.quantity ?? 0),
+        unitPrice: toDecimal(item.unitPrice ?? 0),
+        discount: toDecimal(item.discount ?? 0),
+        taxRate: toDecimal(item.taxRate ?? 0),
+        subtotal,
+        taxAmount,
+        total,
+      };
+    });
+    const totals = this.computeInvoiceTotals(computedItems);
+
+    if (
+      kind === InvoiceKind.NOTA_CREDITO &&
+      Number(totals.total) > Number(source.total ?? 0)
+    ) {
+      throw new BadRequestException(
+        'La nota crédito no puede superar el total de la factura original.',
+      );
+    }
+
+    const ambient = source.ambient ?? Ambient.HABILITACION;
+    const noteResolution = await this.ensureNoteResolution(
+      kind === InvoiceKind.NOTA_DEBITO ? 'NOTA_DEBITO' : 'NOTA_CREDITO',
+      ambient,
+    );
+
+    try {
+      const note = await this.prisma.invoice.create({
+        data: {
+          customerId: source.customerId,
+          subtotal: totals.subtotal,
+          discountTotal: totals.discountTotal,
+          taxTotal: totals.taxTotal,
+          total: totals.total,
+          paidAmount: toDecimal(0),
+          balance: totals.total,
+          status: InvoiceStatus.BORRADOR,
+          documentKind: kind,
+          redSourceId: source.id,
+          billNumber: source.factusNumber,
+          correctionConceptCode: dto.correctionConceptCode,
+          operationType:
+            dto.customizationId ??
+            (kind === InvoiceKind.NOTA_CREDITO ? '20' : '30'),
+          notes: dto.observation?.trim(),
+          createdById: actorId,
+          resolutionId: noteResolution.id,
+          ambient,
+          items: {
+            create: computedItems.map((item) => ({
+              productId: item.productId,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount,
+              taxRate: item.taxRate,
+              subtotal: item.subtotal,
+              taxAmount: item.taxAmount,
+              total: item.total,
+            })),
+          },
+        },
+        include: { items: true, customer: true, resolution: true },
+      });
+
+      await this.auditService
+        .log({
+          userId: actorId,
+          action: AuditAction.CREATE,
+          entityType: 'Invoice',
+          entityId: note.id,
+          newValue: note,
+        })
+        .catch(() => {});
+
+      return note;
+    } catch (err) {
+      if (!useInMemoryFallback()) throw err;
+
+      const noteId = randomUUID();
+      const totalNum = Number(totals.total);
+      const memNote = {
+        id: noteId,
+        invoiceNumber: null,
+        customerId: source.customerId,
+        subtotal: Number(totals.subtotal),
+        discountTotal: Number(totals.discountTotal),
+        taxTotal: Number(totals.taxTotal),
+        total: totalNum,
+        paidAmount: 0,
+        balance: totalNum,
+        status: InvoiceStatus.BORRADOR,
+        documentKind: kind,
+        redSourceId: source.id,
+        billNumber: source.factusNumber,
+        correctionConceptCode: dto.correctionConceptCode,
+        operationType:
+          dto.customizationId ??
+          (kind === InvoiceKind.NOTA_CREDITO ? '20' : '30'),
+        notes: dto.observation?.trim(),
+        items: computedItems.map((i, index) => ({
+          id: randomUUID(),
+          invoiceId: noteId,
+          productId: i.productId,
+          description: i.description,
+          quantity: Number(i.quantity),
+          unitPrice: Number(i.unitPrice),
+          discount: Number(i.discount),
+          taxRate: Number(i.taxRate),
+          subtotal: Number(i.subtotal),
+          taxAmount: Number(i.taxAmount),
+          total: Number(i.total),
+        })),
+        payments: [],
+      };
+
+      globalStore.invoices.push(memNote);
+      return memNote;
+    }
+  }
+
+  private async ensureNoteResolution(
+    kind: 'NOTA_CREDITO' | 'NOTA_DEBITO',
+    ambient: Ambient,
+  ) {
+    const existing = await this.prisma.resolution.findFirst({
+      where: {
+        type: kind,
+        isActive: true,
+        numberingRangeId: { not: null },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existing) return existing;
+
+    const rangeId =
+      kind === 'NOTA_CREDITO'
+        ? Number(process.env.FACTUS_NC_RANGE_ID ?? 390)
+        : Number(process.env.FACTUS_ND_RANGE_ID ?? 391);
+
+    return this.prisma.resolution.create({
+      data: {
+        prefix: kind === 'NOTA_CREDITO' ? 'NC-' : 'ND-',
+        resolutionNumber: '',
+        from: 1,
+        to: 999999999,
+        next: 1,
+        dateFrom: null,
+        dateTo: null,
+        type: kind,
+        isActive: true,
+        ambient,
+        numberingRangeId: rangeId,
+        documentCode: mapResolutionTypeToDian(kind),
+      },
+    });
+  }
+
+  private async safeDownloadNotePdf(
+    number: string,
+    kind: 'credit-notes' | 'debit-notes',
+  ): Promise<Buffer | null> {
+    try {
+      return await this.factusAdapter.downloadNotePdf(number, kind);
+    } catch {
+      return null;
+    }
+  }
+
+  private async safeDownloadNoteXml(
+    number: string,
+    kind: 'credit-notes' | 'debit-notes',
+  ): Promise<string | null> {
+    try {
+      return await this.factusAdapter.downloadNoteXml(number, kind);
+    } catch {
+      return null;
+    }
+  }
+
+  private async emitNote(existing: any, actorId: string) {
+    const kind: 'NOTA_CREDITO' | 'NOTA_DEBITO' =
+      existing.documentKind === InvoiceKind.NOTA_DEBITO
+        ? 'NOTA_DEBITO'
+        : 'NOTA_CREDITO';
+
+    const full = await this.prisma.invoice.findUnique({
+      where: { id: existing.id },
+      include: {
+        customer: true,
+        items: { include: { product: true } },
+        payments: true,
+        redSource: true,
+        resolution: true,
+      },
+    });
+    if (!full) throw new NotFoundException('Nota no encontrada.');
+
+    const source = full.redSource;
+    if (!source?.factusNumber || !full.billNumber) {
+      throw new BadRequestException(
+        'La nota no tiene una factura de referencia validada ante la DIAN.',
+      );
+    }
+
+    let note = full;
+    if (!full.referenceCode) {
+      note = await this.prisma.invoice.update({
+        where: { id: full.id },
+        data: { referenceCode: generateReferenceCode(full.id) },
+        include: {
+          customer: true,
+          items: { include: { product: true } },
+          payments: true,
+          redSource: true,
+          resolution: true,
+        },
+      });
+    }
+
+    const company = await this.prisma.companySettings.findUnique({
+      where: { id: 'default' },
+    });
+    if (!company) {
+      throw new BadRequestException(
+        'Configuración de empresa no encontrada. Completa los datos del emisor.',
+      );
+    }
+
+    const payload = this.factusEmission.buildNotePayload(
+      note,
+      note.resolution ?? { numberingRangeId: null },
+      company,
+      kind,
+    );
+
+    let response: any;
+    try {
+      response =
+        kind === 'NOTA_CREDITO'
+          ? await this.factusAdapter.validateNoteCredit(payload)
+          : await this.factusAdapter.validateNoteDebit(payload);
+    } catch (err) {
+      if (err instanceof FactusApiException && err.isAlreadyExists()) {
+        throw new BadRequestException(
+          'La nota ya fue enviada a la DIAN previamente. Verifica su estado en Factus.',
+        );
+      }
+      throw new BadRequestException(
+        err instanceof Error
+          ? err.message
+          : 'Error al enviar la nota a la DIAN.',
+      );
+    }
+
+    const data = response?.data;
+    if (!data?.number) {
+      throw new BadRequestException(
+        'Factus no devolvió el número oficial de la nota.',
+      );
+    }
+
+    const links = data.links ?? {};
+    const noteKindPath: 'credit-notes' | 'debit-notes' =
+      kind === 'NOTA_CREDITO' ? 'credit-notes' : 'debit-notes';
+    const label = kind === 'NOTA_CREDITO' ? 'nota-credito' : 'nota-debito';
+    const { xmlPath, pdfPath } = await this.factusEmission
+      .archiveDocuments(
+        data.number,
+        await this.safeDownloadNoteXml(data.number, noteKindPath),
+        await this.safeDownloadNotePdf(data.number, noteKindPath),
+        label,
+      )
+      .catch(async (err) => {
+        this.logger?.error?.(
+          `Factus: no se pudo archivar documentos de la nota: ${(err as Error).message}`,
+        );
+        return { xmlPath: null, pdfPath: null };
+      });
+
+    const dianStatus = this.factusEmission.determineDianStatus(data);
+
+    const updated = await this.prisma.invoice.update({
+      where: { id: existing.id },
+      data: {
+        invoiceNumber: data.number,
+        factusNumber: data.number,
+        issueDate: new Date(),
+        status: InvoiceStatus.EMITIDA,
+        resolutionId: full.resolution?.id ?? null,
+        ambient: full.ambient,
+        cufe: data.cufe ?? null,
+        dianStatus,
+        validatedAt: parseFactusDate(data.validated_at) ?? new Date(),
+        qrUrl: links.qr ?? links.url_qr_code ?? null,
+        publicUrl: links.public_url ?? links.url_public ?? null,
+        graphicRepresentationUrl:
+          links.graphic_representation ??
+          links.url_graphic_representation ??
+          null,
+        xmlPath,
+        pdfPath,
+        factusPayload: data as Prisma.InputJsonValue,
+      },
+      include: { items: true, customer: true },
+    });
+
+    if (full.resolution?.id) {
+      await this.prisma.resolution
+        .update({
+          where: { id: full.resolution.id },
+          data: { next: { increment: 1 } },
+        })
+        .catch(() => {});
+    }
+
+    const noteTotal = Number(data?.totals?.total ?? Number(full.total ?? 0));
+    if (kind === 'NOTA_CREDITO' && noteTotal >= Number(source.total ?? 0)) {
+      await this.prisma.invoice
+        .update({
+          where: { id: source.id },
+          data: {
+            status: InvoiceStatus.CANCELADA,
+            cancelledAt: new Date(),
+          },
+        })
+        .catch(() => {});
+    }
+
+    await this.auditService
+      .log({
+        userId: actorId,
+        action: AuditAction.EMIT,
+        entityType: 'Invoice',
+        entityId: existing.id,
+        oldValue: { status: existing.status },
+        newValue: data as Prisma.InputJsonValue,
+      })
+      .catch(() => {});
+
+    return updated;
+  }
+
   async emit(id: string, actorId: string) {
     const existing = await this.findOne(id);
 
@@ -293,6 +700,18 @@ export class InvoicesService {
       throw new BadRequestException(
         'Solo se pueden emitir facturas en estado borrador.',
       );
+    }
+
+    if (
+      existing.documentKind &&
+      existing.documentKind !== InvoiceKind.FACTURA
+    ) {
+      if (!this.factusAuth.isConfigured()) {
+        throw new BadRequestException(
+          'Factus no está configurado para emitir notas.',
+        );
+      }
+      return this.emitNote(existing, actorId);
     }
 
     if (this.factusAuth.isConfigured()) {
@@ -687,10 +1106,17 @@ export class InvoicesService {
           ]
         : undefined;
 
+    const docLabel =
+      invoice.documentKind === InvoiceKind.NOTA_CREDITO
+        ? 'Nota crédito'
+        : invoice.documentKind === InvoiceKind.NOTA_DEBITO
+          ? 'Nota débito'
+          : 'Factura';
+
     const html = renderBrandedEmail({
       companyName: company.name,
-      title: `Factura ${invoice.invoiceNumber}`,
-      subtitle: `Hola${customer ? ` ${customer.name}` : ''}, adjuntamos su factura.`,
+      title: `${docLabel} ${invoice.invoiceNumber}`,
+      subtitle: `Hola${customer ? ` ${customer.name}` : ''}, adjuntamos su ${docLabel.toLowerCase()}.`,
       rows: [
         { label: 'Número', value: invoice.invoiceNumber },
         { label: 'Cliente', value: customer?.name ?? '-' },
@@ -703,11 +1129,19 @@ export class InvoicesService {
       dianBlock,
       logoBase64,
       contact: BRAND_CONTACT,
+      ...(invoice.publicUrl
+        ? {
+            cta: {
+              label: 'Ver factura pública',
+              url: invoice.publicUrl,
+            },
+          }
+        : {}),
     });
 
     const result = await this.email.sendMail({
       to: targetEmail,
-      subject: `Factura ${invoice.invoiceNumber} - ${company.name}`,
+      subject: `${docLabel} ${invoice.invoiceNumber} - ${company.name}`,
       html,
       attachments: [
         { filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer },

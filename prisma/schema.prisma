@@ -93,7 +93,14 @@ enum DeliveryOrderStatus {
 enum ResolutionType {
   FACTURA
   NOTA_CREDITO
+  NOTA_DEBITO
   OTRO
+}
+
+enum InvoiceKind {
+  FACTURA
+  NOTA_CREDITO
+  NOTA_DEBITO
 }
 
 enum Ambient {
@@ -238,6 +245,11 @@ model Invoice {
   paidAmount    Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
   balance       Decimal       @default(0) @db.Decimal(12, 2)
   status        InvoiceStatus @default(BORRADOR)
+  documentKind  InvoiceKind   @default(FACTURA) @map("document_kind")
+  redSourceId   String?       @map("red_source_id")
+  billNumber    String?       @map("bill_number")
+  correctionConceptCode String? @map("correction_concept_code")
+  operationType String?       @map("operation_type")
   notes         String?
   cancelledAt   DateTime?     @map("cancelled_at")
   cufe          String?       @map("cufe")
@@ -267,6 +279,8 @@ model Invoice {
   customer     Customer             @relation(fields: [customerId], references: [id])
   createdBy    Profile?             @relation("InvoiceCreator", fields: [createdById], references: [id])
   resolution   Resolution?          @relation(fields: [resolutionId], references: [id])
+  redSource    Invoice?             @relation("InvoiceNoteSource", fields: [redSourceId], references: [id])
+  noteChildren Invoice[]            @relation("InvoiceNoteSource")
   items        InvoiceItem[]
   serviceLinks ServiceInvoiceLink[]
   payments     Payment[]
@@ -276,6 +290,8 @@ model Invoice {
   @@index([customerId])
   @@index([status])
   @@index([dueDate])
+  @@index([documentKind])
+  @@index([redSourceId])
   @@map("invoices")
 }
 

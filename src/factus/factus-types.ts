@@ -91,6 +91,25 @@ export interface FactusBuildInput {
   paymentForm: '1' | '2';
 }
 
+export type FactusNoteKind = 'NOTA_CREDITO' | 'NOTA_DEBITO';
+
+export interface FactusNoteBuildInput {
+  referenceCode: string;
+  numberingRangeId: number;
+  billNumber: string;
+  correctionConceptCode: string;
+  customizationId: string;
+  observation?: string;
+  cashRoundingAmount?: number;
+  customer: FactusBuildCustomer;
+  company: FactusBuildCompany;
+  items: FactusBuildItem[];
+  amount: number;
+  dueDate?: Date;
+  paymentMethodDian: string;
+  paymentForm: '1' | '2';
+}
+
 export interface FactusStatus {
   configured: boolean;
   ambient: string;

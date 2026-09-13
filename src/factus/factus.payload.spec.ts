@@ -1,5 +1,5 @@
-import { buildBillPayload } from './factus-payload';
-import type { FactusBuildInput } from './factus-types';
+import { buildBillPayload, buildNotePayload } from './factus-payload';
+import type { FactusBuildInput, FactusNoteBuildInput } from './factus-types';
 
 const makeInput = (): FactusBuildInput => ({
   referenceCode: 'REF1234567890',
@@ -47,6 +47,29 @@ const makeInput = (): FactusBuildInput => ({
   paymentForm: '2',
 });
 
+const makeNoteInput = (): FactusNoteBuildInput => ({
+  referenceCode: 'REFNOTE0001',
+  numberingRangeId: 390,
+  billNumber: 'SETP990000123',
+  correctionConceptCode: '1',
+  customizationId: '20',
+  observation: 'Anulación total',
+  customer: makeInput().customer,
+  company: makeInput().company,
+  items: [
+    {
+      code: 'P001',
+      name: 'Fotocopias A4',
+      quantity: 10,
+      price: 100,
+      taxRate: 19,
+    },
+  ],
+  amount: 1190,
+  paymentMethodDian: '10',
+  paymentForm: '1',
+});
+
 describe('buildBillPayload', () => {
   it('arma el bloque de ítems con taxes del contrato V2', () => {
     const payload = buildBillPayload(makeInput()) as any;
@@ -90,5 +113,53 @@ describe('buildBillPayload', () => {
     input.paidAmount = 1190;
     const payload = buildBillPayload(input) as any;
     expect(payload.payment_details[0].amount).toBe(1190);
+  });
+});
+
+describe('buildNotePayload', () => {
+  it('arma una nota crédito con customization_id 20 y bill_number', () => {
+    const payload = buildNotePayload(makeNoteInput()) as any;
+    expect(payload.correction_concept_code).toBe('1');
+    expect(payload.customization_id).toBe('20');
+    expect(payload.bill_number).toBe('SETP990000123');
+    expect(payload.numbering_range_id).toBe(390);
+    expect(payload.observation).toBe('Anulación total');
+    expect(payload.customer.type).toBeUndefined();
+    const item = payload.items[0];
+    expect(item.tax_amount).toBeUndefined();
+    expect(item.discount_rate).toBe('0.00');
+    expect(item.taxes).toEqual([{ code: '01', rate: '19.00' }]);
+  });
+
+  it('arma una nota débito con customization_id 30 y sin observación', () => {
+    const input = makeNoteInput();
+    input.customizationId = '30';
+    input.observation = undefined;
+    const payload = buildNotePayload(input) as any;
+    expect(payload.customization_id).toBe('30');
+    expect(payload.observation).toBeUndefined();
+  });
+
+  it('arma payment_details con el monto total de la nota', () => {
+    const payload = buildNotePayload(makeNoteInput()) as any;
+    expect(payload.payment_details).toEqual([
+      { payment_method_code: '10', payment_form: '1', amount: 1190 },
+    ]);
+  });
+
+  it('incluye discount_rate cuando el ítem tiene descuento', () => {
+    const input = makeNoteInput();
+    input.items = [
+      {
+        code: 'P001',
+        name: 'Prod',
+        quantity: 1,
+        price: 100,
+        taxRate: 19,
+        discount: 10,
+      },
+    ];
+    const payload = buildNotePayload(input) as any;
+    expect(payload.items[0].discount_rate).toBe('10.00');
   });
 });

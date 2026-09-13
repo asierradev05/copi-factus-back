@@ -39,6 +39,12 @@ export class FactusAdapterService {
   validateBills(payload: unknown): Promise<any> {
     return this.request('POST', '/v2/bills/validate', payload);
   }
+  validateNoteCredit(payload: unknown): Promise<any> {
+    return this.request('POST', '/v2/credit-notes/validate', payload);
+  }
+  validateNoteDebit(payload: unknown): Promise<any> {
+    return this.request('POST', '/v2/debit-notes/validate', payload);
+  }
   listBills(params?: Params): Promise<any> {
     return this.request('GET', '/v2/bills', undefined, params);
   }
@@ -59,6 +65,58 @@ export class FactusAdapterService {
     const headers = { Authorization: `Bearer ${token}` };
     const res = await globalThis.fetch(
       `${this.auth.getBaseUrl()}/v2/bills/${encodeURIComponent(number)}/download-xml`,
+      { method: 'GET', headers },
+    );
+    if (!res.ok) {
+      throw await this.buildError(res, await res.text());
+    }
+    const raw = await res.text();
+    try {
+      const parsed = JSON.parse(raw);
+      const b64 = parsed?.data?.xml_base_64_encoded;
+      if (typeof b64 === 'string') {
+        return Buffer.from(b64, 'base64').toString('utf-8');
+      }
+    } catch {
+      return raw;
+    }
+    return raw;
+  }
+
+  async downloadNotePdf(
+    number: string,
+    kind: 'credit-notes' | 'debit-notes',
+  ): Promise<Buffer> {
+    const token = await this.auth.getAccessToken();
+    const headers = { Authorization: `Bearer ${token}` };
+    const res = await globalThis.fetch(
+      `${this.auth.getBaseUrl()}/v2/${kind}/${encodeURIComponent(number)}/download-pdf`,
+      { method: 'GET', headers },
+    );
+    if (!res.ok) {
+      throw await this.buildError(res, await res.text());
+    }
+    const raw = await res.text();
+    try {
+      const parsed = JSON.parse(raw);
+      const b64 = parsed?.data?.pdf_base_64_encoded;
+      if (typeof b64 === 'string') {
+        return Buffer.from(b64, 'base64');
+      }
+    } catch {
+      return Buffer.from(raw);
+    }
+    return Buffer.from(raw);
+  }
+
+  async downloadNoteXml(
+    number: string,
+    kind: 'credit-notes' | 'debit-notes',
+  ): Promise<string> {
+    const token = await this.auth.getAccessToken();
+    const headers = { Authorization: `Bearer ${token}` };
+    const res = await globalThis.fetch(
+      `${this.auth.getBaseUrl()}/v2/${kind}/${encodeURIComponent(number)}/download-xml`,
       { method: 'GET', headers },
     );
     if (!res.ok) {
