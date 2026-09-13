@@ -9,6 +9,24 @@ import {
 @Injectable()
 export class DocumentAttachmentsService {
   private readonly BUCKET = 'document-attachments';
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024;
+  private readonly ALLOWED_EXTENSIONS = [
+    'pdf',
+    'doc',
+    'docx',
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'webp',
+    'bmp',
+  ];
+  private readonly ALLOWED_MIME_PREFIXES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/',
+  ];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -42,6 +60,7 @@ export class DocumentAttachmentsService {
     if (objectPath.includes('..')) {
       throw new BadRequestException('storagePath inválido.');
     }
+    this.assertFileAllowed(dto.fileName, dto.fileSize, dto.mimeType);
 
     return this.prisma.documentAttachment.create({
       data: {
@@ -76,6 +95,7 @@ export class DocumentAttachmentsService {
     if (!cleanName) {
       throw new BadRequestException('Nombre de archivo no válido.');
     }
+    this.assertFileAllowed(cleanName);
 
     await this.supabase.ensureBucket(this.BUCKET);
     const path = `attachments/${type}/${cleanId}/${Date.now()}-${cleanName}`;
@@ -103,5 +123,29 @@ export class DocumentAttachmentsService {
       .replace(/\.{2,}/g, '_')
       .trim()
       .slice(0, 255);
+  }
+
+  private assertFileAllowed(
+    fileName: string,
+    fileSize?: number,
+    mimeType?: string | null,
+  ): void {
+    if (fileSize != null && fileSize > this.MAX_FILE_SIZE) {
+      throw new BadRequestException(
+        'El archivo no puede superar 10MB.',
+      );
+    }
+    const ext = (fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
+    if (!ext || !this.ALLOWED_EXTENSIONS.includes(ext)) {
+      throw new BadRequestException('Formato de archivo no permitido.');
+    }
+    if (mimeType) {
+      const allowed = this.ALLOWED_MIME_PREFIXES.some((prefix) =>
+        mimeType.startsWith(prefix),
+      );
+      if (!allowed) {
+        throw new BadRequestException('Tipo de archivo no permitido.');
+      }
+    }
   }
 }

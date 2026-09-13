@@ -121,5 +121,50 @@ describe('DocumentAttachmentsService', () => {
         },
       });
     });
+
+    it('rechaza un archivo mayor al límite de tamaño', async () => {
+      await expect(
+        service.create({ ...base, fileSize: 11 * 1024 * 1024 }, 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaCreate).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un archivo con extensión no permitida', async () => {
+      await expect(
+        service.create({ ...base, fileName: 'app.exe' }, 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaCreate).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un archivo con mimeType peligroso', async () => {
+      await expect(
+        service.create({ ...base, mimeType: 'application/x-msdownload' }, 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('presignUpload (límites de archivo)', () => {
+    it('rechaza presign de una extensión no permitida', async () => {
+      await expect(
+        service.presignUpload(
+          'backdoor.exe',
+          'invoice',
+          '11111111-2222-3333-4444-555555555555',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(presignUploadUrl).not.toHaveBeenCalled();
+    });
+
+    it('permite presign de imágenes y pdf', async () => {
+      for (const name of ['foto.png', 'logo.jpg', 'doc.pdf']) {
+        const result = await service.presignUpload(
+          name,
+          'invoice',
+          '11111111-2222-3333-4444-555555555555',
+        );
+        expect(result.path.split('.').pop()).toBe(name.split('.').pop());
+      }
+    });
   });
 });
