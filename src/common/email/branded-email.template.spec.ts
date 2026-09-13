@@ -1,8 +1,12 @@
-import { escapeHtml, renderBrandedEmail } from './branded-email.template';
+import {
+  BRAND_BLUE,
+  escapeHtml,
+  renderBrandedEmail,
+} from './branded-email.template';
 
 describe('renderBrandedEmail', () => {
   const base = {
-    companyName: 'CopiGráfica Sierra',
+    companyName: 'Copigráficas Sierra',
     title: 'Factura FAC-001',
   };
 
@@ -14,8 +18,8 @@ describe('renderBrandedEmail', () => {
       totalValue: '9520,00',
     });
 
-    expect(html).toContain('CopiGráfica Sierra');
-    expect(html).toContain('#2f7ec8');
+    expect(html).toContain('Copigráficas Sierra');
+    expect(html).toContain(BRAND_BLUE);
     expect(html).toContain('Factura FAC-001');
     expect(html).toContain('Total');
     expect(html).toContain('9520,00');
@@ -34,6 +38,7 @@ describe('renderBrandedEmail', () => {
   it('omite el bloque DIAN cuando no se pasa', () => {
     const html = renderBrandedEmail(base);
     expect(html).not.toContain('CUFE');
+    expect(html).not.toContain('Información DIAN');
   });
 
   it('muestra el bloque DIAN cuando se pasa', () => {
@@ -45,6 +50,7 @@ describe('renderBrandedEmail', () => {
       ],
     });
 
+    expect(html).toContain('Información DIAN');
     expect(html).toContain('CUFE');
     expect(html).toContain('VALIDADA');
   });
@@ -77,11 +83,52 @@ describe('renderBrandedEmail', () => {
     expect(html).not.toContain('data:image/');
   });
 
-  it('no genera enlaces de acceso (uso interno de la aplicación)', () => {
+  it('muestra la sección de servicios de Copigráficas', () => {
     const html = renderBrandedEmail(base);
-    expect(html).not.toContain('<a href');
-    expect(html).not.toContain('Ver factura');
-    expect(html).not.toContain('http://');
+
+    expect(html).toContain('Conoce Nuestros Principales Servicios');
+    expect(html).toContain('Impresión personalizada');
+    expect(html).toContain('Marketing digital');
+  });
+
+  it('no genera botón CTA cuando no se pasa url', () => {
+    const html = renderBrandedEmail(base);
+    expect(html).not.toContain('Ver factura pública');
+    expect(html).not.toContain('Ver factura</a>');
+  });
+
+  it('genera botón CTA cuando se pasa', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      cta: {
+        label: 'Ver factura pública',
+        url: 'https://test.factus.lat/v1/123',
+      },
+    });
+
+    expect(html).toContain('Ver factura pública');
+    expect(html).toContain('https://test.factus.lat/v1/123');
+    expect(html).toContain('<a href="https://test.factus.lat/v1/123"');
+  });
+
+  it('incluye enlace de WhatsApp de la marca en el pie cuando hay contacto', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      contact: { whatsapp: '+57 310 258 6169' },
+    });
+
+    expect(html).toContain('Hablemos por WhatsApp');
+    expect(html).toContain('https://api.whatsapp.com/send?phone=573102586169');
+  });
+
+  it('escapa la URL del CTA', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      cta: { label: 'Ver', url: 'https://x.com/?q="><script>' },
+    });
+
+    expect(html).not.toContain('"><script>');
+    expect(html).toContain('&quot;&gt;&lt;script&gt;');
   });
 
   it('incluye el disclaimer informativo en el pie', () => {
