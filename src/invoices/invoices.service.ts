@@ -361,13 +361,31 @@ export class InvoicesService {
     });
     const totals = this.computeInvoiceTotals(computedItems);
 
-    if (
-      kind === InvoiceKind.NOTA_CREDITO &&
-      Number(totals.total) > Number(source.total ?? 0)
-    ) {
-      throw new BadRequestException(
-        'La nota crédito no puede superar el total de la factura original.',
-      );
+    const sourceTotal = Number(source.total ?? 0);
+    if (kind === InvoiceKind.NOTA_CREDITO) {
+      const credited = await this.prisma.invoice
+        .aggregate({
+          where: {
+            redSourceId: source.id,
+            documentKind: InvoiceKind.NOTA_CREDITO,
+            status: { in: [InvoiceStatus.BORRADOR, InvoiceStatus.EMITIDA] },
+          },
+          _sum: { total: true },
+        })
+        .then((r) => Number(r._sum?.total ?? 0))
+        .catch(() => 0);
+      if (credited + Number(totals.total) > sourceTotal) {
+        throw new BadRequestException(
+          `El total de notas crédito (${(
+            credited + Number(totals.total)
+          ).toLocaleString('es-CO')}) supera el de la factura original (${sourceTotal.toLocaleString('es-CO')}).`,
+        );
+      }
+      if (Number(totals.total) > sourceTotal) {
+        throw new BadRequestException(
+          'La nota crédito no puede superar el total de la factura original.',
+        );
+      }
     }
 
     const ambient = source.ambient ?? Ambient.HABILITACION;
@@ -479,6 +497,7 @@ export class InvoicesService {
       where: {
         type: kind,
         isActive: true,
+        ambient,
         numberingRangeId: { not: null },
       },
       orderBy: { createdAt: 'asc' },
@@ -598,10 +617,11 @@ export class InvoicesService {
           'La nota ya fue enviada a la DIAN previamente. Verifica su estado en Factus.',
         );
       }
+      this.logger?.error?.(
+        `Factus: error enviando nota ${kind}: ${(err as Error).message}`,
+      );
       throw new BadRequestException(
-        err instanceof Error
-          ? err.message
-          : 'Error al enviar la nota a la DIAN.',
+        'Factus rechazó la nota. Verifica los datos y reintenta.',
       );
     }
 
@@ -609,6 +629,11 @@ export class InvoicesService {
     if (!data?.number) {
       throw new BadRequestException(
         'Factus no devolvió el número oficial de la nota.',
+      );
+    }
+    if (!/^[A-Z0-9-]{3,50}$/.test(String(data.number))) {
+      throw new BadRequestException(
+        'Factus devolvió un número de nota inválido. No se persiste ni archiva.',
       );
     }
 
@@ -632,8 +657,12 @@ export class InvoicesService {
 
     const dianStatus = this.factusEmission.determineDianStatus(data);
 
-    const updated = await this.prisma.invoice.update({
-      where: { id: existing.id },
+    const result = await this.prisma.invoice.updateMany({
+      where: {
+        id: existing.id,
+        status: InvoiceStatus.BORRADOR,
+        referenceCode: note.referenceCode ?? null,
+      },
       data: {
         invoiceNumber: data.number,
         factusNumber: data.number,
@@ -654,8 +683,18 @@ export class InvoicesService {
         pdfPath,
         factusPayload: data as Prisma.InputJsonValue,
       },
+    });
+    if (result.count === 0) {
+      throw new BadRequestException(
+        'La nota ya fue emitida o su estado cambió. Refresca y verifica en Factus si fue enviada.',
+      );
+    }
+
+    const updated = await this.prisma.invoice.findUnique({
+      where: { id: existing.id },
       include: { items: true, customer: true },
     });
+    if (!updated) throw new NotFoundException('Nota no encontrada.');
 
     if (full.resolution?.id) {
       await this.prisma.resolution
@@ -667,7 +706,12 @@ export class InvoicesService {
     }
 
     const noteTotal = Number(data?.totals?.total ?? Number(full.total ?? 0));
-    if (kind === 'NOTA_CREDITO' && noteTotal >= Number(source.total ?? 0)) {
+    const sourceUnpaid = Number(source.paidAmount ?? 0) <= 0;
+    if (
+      kind === 'NOTA_CREDITO' &&
+      noteTotal >= Number(source.total ?? 0) &&
+      sourceUnpaid
+    ) {
       await this.prisma.invoice
         .update({
           where: { id: source.id },
