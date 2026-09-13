@@ -46,6 +46,16 @@ describe('renderBrandedEmail', () => {
     expect(html).toContain('www.facebook.com/profile.php?id=61566315975069');
   });
 
+  it('usa el logo Copigráficas Sierra (base64) también en el pie', () => {
+    const html = renderBrandedEmail({
+      ...base,
+      logoBase64: 'data:image/png;base64,LOGO',
+    });
+
+    expect(html.split('data:image/png;base64,LOGO').length).toBeGreaterThanOrEqual(2);
+    expect(html).not.toContain(assets.logo);
+  });
+
   it('incluye imagen héroe, el título y el total', () => {
     const html = renderBrandedEmail({
       ...base,

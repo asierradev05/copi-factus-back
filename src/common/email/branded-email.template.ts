@@ -142,6 +142,7 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
   const MAX_LOGO_CHARS = 200_000;
   const useBase64Logo =
     logoBase64 && logoBase64.length < MAX_LOGO_CHARS ? logoBase64 : null;
+  const footerLogo = useBase64Logo ?? a.logo;
 
   const rowsHtml = rows
     .map(
@@ -310,7 +311,7 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="width:55%;vertical-align:top;padding-right:16px;">
-                      <img src="${escapeHtml(a.logo)}" alt="${escapeHtml(companyName)}" width="162" style="display:inline-block;width:162px;max-width:100%;margin-bottom:12px;border:0;">
+                      <img src="${escapeHtml(footerLogo)}" alt="${escapeHtml(companyName)}" width="162" style="display:inline-block;width:162px;max-width:100%;margin-bottom:12px;border:0;">
                       <div style="font-size:12px;color:${TEXT_COLOR};line-height:1.6;margin-bottom:8px;">${footerAddressHtml}</div>
                       <div style="font-size:12px;line-height:1.7;margin-bottom:8px;">${footerEmailsHtml}</div>
                       <div style="font-size:12px;color:${TEXT_COLOR};font-weight:700;">${escapeHtml(FOOTER_PHONE)}</div>
