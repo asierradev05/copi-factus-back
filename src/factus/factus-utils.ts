@@ -6,10 +6,9 @@ export function round2(n: number): number {
 
 export function parseFactusDate(value?: string | null): Date | null {
   if (!value) return null;
-  const m =
-    /^(\d{2})-(\d{2})-(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/i.exec(
-      value.trim(),
-    );
+  const m = /^(\d{2})-(\d{2})-(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/i.exec(
+    value.trim(),
+  );
   if (m) {
     let hour = Number(m[4]);
     const minute = Number(m[5]);
@@ -20,7 +19,9 @@ export function parseFactusDate(value?: string | null): Date | null {
     const day = Number(m[1]);
     const month = Number(m[2]);
     const year = Number(m[3]);
-    return new Date(Date.UTC(year, month - 1, day, hour, minute, second) + 5 * 3600000);
+    return new Date(
+      Date.UTC(year, month - 1, day, hour, minute, second) + 5 * 3600000,
+    );
   }
   const fallback = new Date(value);
   return Number.isNaN(fallback.getTime()) ? null : fallback;

@@ -200,10 +200,7 @@ function sectionHeader(text: string): Content {
   };
 }
 
-function itemRow(
-  line: QuotePdfLineItem,
-  index: number,
-): Content[] {
+function itemRow(line: QuotePdfLineItem, index: number): Content[] {
   const fill = index % 2 === 1 ? '#f0f0f0' : '#ffffff';
   const make = (
     content: string,
@@ -362,7 +359,7 @@ export function buildQuoteDocDefinition(
       columns: [
         {
           width: '*',
-          stack: ([
+          stack: [
             {
               text: 'TÉRMINOS Y CONDICIONES',
               bold: true,
@@ -371,12 +368,11 @@ export function buildQuoteDocDefinition(
               margin: [0, 0, 0, 2],
             },
             {
-              text:
-                'Los precios están sujetos a disponibilidad y a la vigencia de la presente cotización. Para aceptación, confirme por escrito antes de la fecha de vencimiento.',
+              text: 'Los precios están sujetos a disponibilidad y a la vigencia de la presente cotización. Para aceptación, confirme por escrito antes de la fecha de vencimiento.',
               fontSize: 8.5,
               margin: [0, 2, 0, 0],
             },
-          ] as Content[]),
+          ] as Content[],
         },
         {
           width: 220,
@@ -464,10 +460,14 @@ export async function generateQuotePdf(
 ): Promise<Buffer> {
   pdfmake.setFonts(DEFAULT_FONTS);
   const doc = pdfmake.createPdf(
-    buildQuoteDocDefinition(quote, {
-      ...company,
-      logoBase64: company.logoBase64 ?? (await getBrandLogoBase64()),
-    }, status),
+    buildQuoteDocDefinition(
+      quote,
+      {
+        ...company,
+        logoBase64: company.logoBase64 ?? (await getBrandLogoBase64()),
+      },
+      status,
+    ),
   );
   return doc.getBuffer();
 }

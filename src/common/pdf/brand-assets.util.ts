@@ -5,8 +5,7 @@ export const BRAND = {
   email: 'copigraficassierra@gmail.com',
   website: 'www.copigraficassierra.com',
   slogan: 'SOMOS UNA EMPRESA DIRECTA (SIN INTERMEDIARIOS)',
-  bank:
-    'Transferencia Bancolombia Cuenta de Ahorros # 17407613040 A nombre de Angel Mesías Sierra',
+  bank: 'Transferencia Bancolombia Cuenta de Ahorros # 17407613040 A nombre de Angel Mesías Sierra',
 } as const;
 
 export const BRAND_LOGO_PATH = '/images/LogoCOPI-small.png';

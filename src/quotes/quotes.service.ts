@@ -17,7 +17,10 @@ import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { globalStore } from '../database/in-memory-store';
 import { EmailService } from '../common/email/email.service';
 import { renderBrandedEmail } from '../common/email/branded-email.template';
-import { generateQuotePdf, type QuotePdfModel } from '../common/pdf/quote-pdf.util';
+import {
+  generateQuotePdf,
+  type QuotePdfModel,
+} from '../common/pdf/quote-pdf.util';
 import type { CompanyPdfModel } from '../common/pdf/invoice-pdf.util';
 import { getBrandLogoBase64, BRAND } from '../common/pdf/brand-assets.util';
 import {

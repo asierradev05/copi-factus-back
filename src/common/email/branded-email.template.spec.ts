@@ -1,7 +1,4 @@
-import {
-  escapeHtml,
-  renderBrandedEmail,
-} from './branded-email.template';
+import { escapeHtml, renderBrandedEmail } from './branded-email.template';
 
 describe('renderBrandedEmail', () => {
   const base = {
@@ -85,6 +82,15 @@ describe('renderBrandedEmail', () => {
     expect(html).not.toContain('<a href');
     expect(html).not.toContain('Ver factura');
     expect(html).not.toContain('http://');
+  });
+
+  it('incluye el disclaimer informativo en el pie', () => {
+    const html = renderBrandedEmail(base);
+
+    expect(html).toContain(
+      'Este correo electrónico únicamente es usado como medio informativo',
+    );
+    expect(html).toContain('no responder a este mensaje');
   });
 });
 

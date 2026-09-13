@@ -23,8 +23,7 @@ export class EmailService {
 
     if (apiKey) {
       this.resend = new Resend(apiKey);
-      this.from =
-        this.config.get<string>('EMAIL_FROM') ?? DEFAULT_EMAIL_FROM;
+      this.from = this.config.get<string>('EMAIL_FROM') ?? DEFAULT_EMAIL_FROM;
       this.transporter = null;
       return;
     }

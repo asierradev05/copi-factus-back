@@ -20,7 +20,11 @@ describe('QuotesService (envío de cotización)', () => {
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuditModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        PrismaModule,
+        AuditModule,
+      ],
       providers: [
         QuotesService,
         {
@@ -65,7 +69,9 @@ describe('QuotesService (envío de cotización)', () => {
     }
     quoteId = '';
     if (customerId) {
-      await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
+      await prisma.customer
+        .delete({ where: { id: customerId } })
+        .catch(() => {});
     }
     customerId = '';
     if (actorId) {

@@ -125,11 +125,12 @@ export class FactusAdapterService {
       raw = JSON.parse(text);
       const data = raw?.data;
       if (data && typeof data.errors === 'object' && data.errors !== null) {
-        messages = Object.entries(data.errors as Record<string, string[]>).flatMap(
-          ([field, errs]) =>
-            Array.isArray(errs)
-              ? errs.map((e) => `${field}: ${e}`)
-              : [`${field}: ${String(errs)}`],
+        messages = Object.entries(
+          data.errors as Record<string, string[]>,
+        ).flatMap(([field, errs]) =>
+          Array.isArray(errs)
+            ? errs.map((e) => `${field}: ${e}`)
+            : [`${field}: ${String(errs)}`],
         );
       } else if (Array.isArray(raw?.error)) {
         messages = raw.error

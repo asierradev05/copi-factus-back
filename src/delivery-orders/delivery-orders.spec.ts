@@ -1,11 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import {
-  DeliveryOrderStatus,
-  DocumentType,
-  UserRole,
-} from '@prisma/client';
+import { DeliveryOrderStatus, DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
@@ -128,7 +124,10 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
       });
       expect(rows).toHaveLength(1);
       expect(rows[0].notes).toBe('Primer lote');
-      const items = rows[0].items as Array<{ description: string; quantity: number }>;
+      const items = rows[0].items as Array<{
+        description: string;
+        quantity: number;
+      }>;
       expect(items[0]).toMatchObject({ description: 'Láminas', quantity: 4 });
     });
 
@@ -209,7 +208,10 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
         where: { deliveryOrderId: dooId },
       });
       expect(rows).toHaveLength(1);
-      const items = rows[0].items as Array<{ description: string; quantity: number }>;
+      const items = rows[0].items as Array<{
+        description: string;
+        quantity: number;
+      }>;
       expect(items).toHaveLength(2);
       expect(items.find((i) => i.description === 'Láminas')?.quantity).toBe(10);
     });
@@ -231,7 +233,10 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
       });
       expect(rows).toHaveLength(2);
       const last = rows[rows.length - 1];
-      const items = last.items as Array<{ description: string; quantity: number }>;
+      const items = last.items as Array<{
+        description: string;
+        quantity: number;
+      }>;
       expect(items.find((i) => i.description === 'Láminas')?.quantity).toBe(6);
       expect(items.find((i) => i.description === 'Afiches')?.quantity).toBe(5);
     });
@@ -325,7 +330,9 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
         (i) => i.description === 'Afiches',
       );
       expect(Number(lineAfiches?.quantity)).toBe(5);
-      const lineLaminas = invoice.items.find((i) => i.description === 'Láminas');
+      const lineLaminas = invoice.items.find(
+        (i) => i.description === 'Láminas',
+      );
       expect(Number(lineLaminas?.quantity)).toBe(10);
       expect(Number(invoice.balance)).toBeCloseTo(
         10 * 2000 * 1.19 + 5 * 1500 * 1.19,

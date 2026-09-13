@@ -278,7 +278,9 @@ export class DeliveryOrdersService {
     const deliveredRows = await this.prisma.deliveryOrderDelivery.findMany({
       where: { deliveryOrderId: id },
     });
-    const delivered = this.sumQuantities(this.aggregateDeliveries(deliveredRows));
+    const delivered = this.sumQuantities(
+      this.aggregateDeliveries(deliveredRows),
+    );
 
     const items = dto.items.map((it) => this.normalizeDeliveryItem(it));
     const unknown = items.find(
@@ -303,7 +305,7 @@ export class DeliveryOrdersService {
       data: {
         deliveryOrderId: id,
         deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : new Date(),
-        items: items as unknown as Prisma.InputJsonValue,
+        items: items,
         notes: dto.notes?.trim() || null,
         createdById: userId,
       },
@@ -361,7 +363,9 @@ export class DeliveryOrdersService {
     const deliveredRows = await this.prisma.deliveryOrderDelivery.findMany({
       where: { deliveryOrderId: id },
     });
-    const delivered = this.sumQuantities(this.aggregateDeliveries(deliveredRows));
+    const delivered = this.sumQuantities(
+      this.aggregateDeliveries(deliveredRows),
+    );
 
     const remaining = plannedItems
       .map((it) => {
@@ -377,9 +381,7 @@ export class DeliveryOrdersService {
             }
           : null;
       })
-      .filter(
-        (x): x is NonNullable<typeof x> => x !== null,
-      );
+      .filter((x): x is NonNullable<typeof x> => x !== null);
 
     const deliveredAt = new Date();
     if (remaining.length > 0) {
@@ -387,9 +389,7 @@ export class DeliveryOrdersService {
         data: {
           deliveryOrderId: id,
           deliveredAt,
-          items: remaining.map((r) =>
-            this.normalizeDeliveryItem(r),
-          ) as unknown as Prisma.InputJsonValue,
+          items: remaining.map((r) => this.normalizeDeliveryItem(r)),
           notes: 'Marcada como totalmente entregada',
           createdById: userId,
         },
@@ -449,13 +449,19 @@ export class DeliveryOrdersService {
       (desc) => (deliveredMap.get(desc) ?? 0) >= (planned.get(desc) ?? 0),
     );
 
-    const byDesc = new Map<string, {
-      description: string;
-      quantity: number;
-      unitPrice: number;
-      taxRate: number;
-    }>();
-    const plannedByDesc = new Map<string, { unitPrice?: number; taxRate?: number }>();
+    const byDesc = new Map<
+      string,
+      {
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        taxRate: number;
+      }
+    >();
+    const plannedByDesc = new Map<
+      string,
+      { unitPrice?: number; taxRate?: number }
+    >();
     for (const it of plannedItems) {
       plannedByDesc.set(it.description.trim().toLowerCase(), it);
     }
@@ -466,8 +472,7 @@ export class DeliveryOrdersService {
       byDesc.set(key, {
         description: it.description.trim(),
         quantity: (cur?.quantity ?? 0) + it.quantity,
-        unitPrice:
-          cur?.unitPrice || it.unitPrice || inherited?.unitPrice || 0,
+        unitPrice: cur?.unitPrice || it.unitPrice || inherited?.unitPrice || 0,
         taxRate: cur?.taxRate || it.taxRate || inherited?.taxRate || 0,
       });
     }
@@ -502,14 +507,15 @@ export class DeliveryOrdersService {
     );
     const total = computed.reduce((s, i) => s.add(i.total), toDecimal(0));
 
-    const notes = [
-      doo.notes ?? '',
-      `Generada desde la orden de entrega ${doo.doNumber}`,
-      isTotal ? null : 'Entrega parcial',
-    ]
-      .filter(Boolean)
-      .join('\n')
-      .trim() || null;
+    const notes =
+      [
+        doo.notes ?? '',
+        `Generada desde la orden de entrega ${doo.doNumber}`,
+        isTotal ? null : 'Entrega parcial',
+      ]
+        .filter(Boolean)
+        .join('\n')
+        .trim() || null;
 
     if (!doo.invoiceId) {
       const invoice = await this.prisma.invoice.create({
@@ -575,7 +581,8 @@ export class DeliveryOrdersService {
       for (const line of computed) {
         const match = rows.find(
           (r) =>
-            r.description.trim().toLowerCase() === line.description.toLowerCase(),
+            r.description.trim().toLowerCase() ===
+            line.description.toLowerCase(),
         );
         if (match) {
           await tx.invoiceItem.update({

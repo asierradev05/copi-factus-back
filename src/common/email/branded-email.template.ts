@@ -91,14 +91,15 @@ export function renderBrandedEmail(params: BrandedEmailParams): string {
 
   const MAX_LOGO_CHARS = 200_000;
 
-const logoHtml = logoBase64 && logoBase64.length < MAX_LOGO_CHARS
-    ? `
+  const logoHtml =
+    logoBase64 && logoBase64.length < MAX_LOGO_CHARS
+      ? `
       <tr>
         <td style="background:#ffffff;padding:20px 28px 14px;text-align:center;border-bottom:4px solid ${BRAND_RED};">
           <img src="${escapeHtml(logoBase64)}" alt="Logo" style="display:block;margin:0 auto;max-height:64px;max-width:220px;width:auto;height:64px;object-fit:contain;">
         </td>
       </tr>`
-    : '';
+      : '';
 
   const contactLines: string[] = [];
   if (contact?.address) contactLines.push(escapeHtml(contact.address));
@@ -139,7 +140,7 @@ const logoHtml = logoBase64 && logoBase64.length < MAX_LOGO_CHARS
                   ${webEmail.length ? `<span style="font-weight:600;color:${BRAND_BLUE};">${webEmail.join(' · ')}</span><br/>` : ''}
                 </div>
                 <div style="text-align:center;font-size:11px;color:#8a94a6;margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">
-                  ${escapeHtml(companyName)} · Documento generado electrónicamente. Por favor no responda este correo.
+                  Este correo electrónico únicamente es usado como medio informativo por lo que le pedimos por favor no responder a este mensaje.
                 </div>
               </td>
             </tr>

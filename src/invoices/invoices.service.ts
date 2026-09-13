@@ -18,7 +18,11 @@ import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/email/email.service';
 import { renderBrandedEmail } from '../common/email/branded-email.template';
 import { SupabaseService } from '../common/supabase/supabase.service';
-import { generateInvoicePdf, STATUS_LABELS, DIAN_LABELS } from '../common/pdf/invoice-pdf.util';
+import {
+  generateInvoicePdf,
+  STATUS_LABELS,
+  DIAN_LABELS,
+} from '../common/pdf/invoice-pdf.util';
 import { getBrandLogoBase64, BRAND } from '../common/pdf/brand-assets.util';
 import type {
   CompanyPdfModel,

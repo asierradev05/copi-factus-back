@@ -21,7 +21,12 @@ const quote: QuotePdfModel = {
   validUntil: new Date('2026-10-12'),
   customerName: 'Cliente Demo',
   lines: [
-    { description: 'Láminas adhesivas', quantity: 10, unitPrice: 2000, taxRate: 19 },
+    {
+      description: 'Láminas adhesivas',
+      quantity: 10,
+      unitPrice: 2000,
+      taxRate: 19,
+    },
   ],
   subtotal: 20000,
   taxTotal: 3800,

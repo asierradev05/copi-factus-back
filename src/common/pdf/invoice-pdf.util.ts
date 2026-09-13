@@ -99,6 +99,15 @@ function formatDate(value?: Date | string | null): string {
   return date.toLocaleDateString('es-CO');
 }
 
+export function chunkCufe(value?: string | null, groupSize = 20): string {
+  if (!value) return '';
+  const groups: string[] = [];
+  for (let i = 0; i < value.length; i += groupSize) {
+    groups.push(value.slice(i, i + groupSize));
+  }
+  return groups.join(' ');
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   BORRADOR: 'Borrador',
   EMITIDA: 'Emitida',
@@ -198,8 +207,14 @@ function headerRightStack(invoice: InvoicePdfModel): Content[] {
               color: '#ec1c24',
             },
           ],
-          [{ text: 'FECHA', bold: true, fontSize: 8 }, boxCell(formatDate(invoice.issueDate), 'right')],
-          [{ text: 'VENCE', bold: true, fontSize: 8 }, boxCell(formatDate(invoice.dueDate), 'right')],
+          [
+            { text: 'FECHA', bold: true, fontSize: 8 },
+            boxCell(formatDate(invoice.issueDate), 'right'),
+          ],
+          [
+            { text: 'VENCE', bold: true, fontSize: 8 },
+            boxCell(formatDate(invoice.dueDate), 'right'),
+          ],
           [
             { text: 'ESTADO', bold: true, fontSize: 8 },
             {
@@ -476,88 +491,133 @@ export function buildDocDefinition(
     (invoice.paymentMethods?.length ?? 0) > 0 ||
     invoice.cashRoundingAmount
   ) {
-    const dianLeft: Content[] = [];
-    if (invoice.resolutionNumber) {
-      dianLeft.push({
-        text: 'RESOLUCIÓN DE FACTURACIÓN',
+    if (invoice.factusNumber || invoice.resolutionNumber) {
+      const labelCell = (text: string): Content => ({
+        text,
         bold: true,
-        fontSize: 9,
-        margin: [0, 0, 0, 2],
+        fontSize: 8.5,
+        color: '#555555',
+        fillColor: '#eef3f9',
+        margin: [6, 4, 2, 4],
       });
-      dianLeft.push({
-        text: `Número: ${invoice.resolutionNumber}`,
-        fontSize: 9,
+      const valueCell = (
+        text: string,
+        opts: { bold?: boolean; color?: string } = {},
+      ): Content => ({
+        text,
+        fontSize: 8.5,
+        bold: opts.bold ?? false,
+        color: opts.color ?? '#222222',
+        margin: [2, 4, 6, 4],
       });
-      dianLeft.push({
-        text: `Fecha: ${formatDate(invoice.resolutionDate)}`,
-        fontSize: 9,
-      });
-    }
+      const tableLayout = {
+        hLineColor: () => '#cbd5e1',
+        vLineColor: () => '#cbd5e1',
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+      };
 
-    if (invoice.factusNumber) {
-      dianLeft.push({
-        text: 'INFORMACIÓN DIAN',
-        bold: true,
-        fontSize: 9,
-        color: '#2f7ec8',
-        margin: [0, 8, 0, 2],
-      });
-      dianLeft.push({
-        text: `Número oficial DIAN: ${invoice.factusNumber}`,
-        bold: true,
-        fontSize: 9,
-      });
+      const dianRows: Content[][] = [
+        [
+          {
+            text: 'INFORMACIÓN DIAN · FACTURA ELECTRÓNICA',
+            colSpan: 2,
+            bold: true,
+            fontSize: 9.5,
+            color: 'white',
+            fillColor: '#2f7ec8',
+            margin: [6, 4, 6, 4],
+          },
+          {},
+        ] as Content[],
+      ];
+
+      if (invoice.factusNumber) {
+        dianRows.push([
+          labelCell('Número oficial DIAN'),
+          valueCell(invoice.factusNumber, { bold: true, color: '#ec1c24' }),
+        ]);
+      }
       if (invoice.referenceCode) {
-        dianLeft.push({
-          text: `Referencia: ${invoice.referenceCode}`,
-          fontSize: 8,
-          color: '#555555',
-        });
+        dianRows.push([
+          labelCell('Referencia'),
+          valueCell(invoice.referenceCode),
+        ]);
+      }
+      if (invoice.resolutionNumber) {
+        dianRows.push([
+          labelCell('Resolución'),
+          valueCell(
+            `Número: ${invoice.resolutionNumber} · Fecha: ${formatDate(
+              invoice.resolutionDate,
+            )}`,
+          ),
+        ]);
+      }
+      if (invoice.dianStatus) {
+        dianRows.push([
+          labelCell('Estado DIAN'),
+          valueCell(DIAN_LABELS[invoice.dianStatus] ?? invoice.dianStatus, {
+            bold: true,
+          }),
+        ]);
+      }
+      if (invoice.cufe) {
+        dianRows.push([
+          labelCell('CUFE'),
+          {
+            text: chunkCufe(invoice.cufe),
+            fontSize: 7.5,
+            color: '#333333',
+            margin: [2, 4, 6, 4],
+          },
+        ]);
       }
       if (invoice.publicUrl) {
-        dianLeft.push({
-          text: invoice.publicUrl,
-          fontSize: 7.5,
-          color: '#2f7ec8',
-          margin: [0, 2, 0, 0],
+        dianRows.push([
+          labelCell('Ver en DIAN'),
+          {
+            text: invoice.publicUrl,
+            fontSize: 7.5,
+            color: '#2f7ec8',
+            margin: [2, 4, 6, 4],
+          },
+        ]);
+      }
+
+      const dianTable: Content = {
+        layout: tableLayout,
+        table: { widths: [110, '*'], body: dianRows },
+      };
+
+      const qrStack: Content[] = [];
+      if (invoice.qrBase64) {
+        qrStack.push({
+          image: invoice.qrBase64,
+          fit: [80, 80],
+          alignment: 'right',
+          margin: [0, 4, 0, 2],
+        });
+        qrStack.push({
+          text: 'Comuníquese · QR DIAN',
+          fontSize: 7,
+          color: '#777777',
+          alignment: 'right',
         });
       }
-    }
 
-    const dianRight: Content[] = [];
-    if (invoice.cufe) {
-      dianRight.push({
-        text: 'CUFE',
-        bold: true,
-        fontSize: 9,
-        margin: [0, 0, 0, 2],
-      });
-      dianRight.push({
-        text: invoice.cufe,
-        fontSize: 7,
-        color: '#333333',
-      });
-      const dianLabel =
-        DIAN_LABELS[invoice.dianStatus] ?? invoice.dianStatus;
-      dianRight.push({
-        text: `Estado DIAN: ${dianLabel}`,
-        fontSize: 9,
-        margin: [0, 4, 0, 0],
-      });
-    }
-    if (invoice.qrBase64) {
-      dianRight.push({
-        image: invoice.qrBase64,
-        fit: [76, 76],
-        alignment: 'right',
-        margin: [0, 6, 0, 0],
-      });
-      dianRight.push({
-        text: 'Comuníquese · Código QR DIAN',
-        fontSize: 7,
-        color: '#777777',
-        alignment: 'right',
-      });
+      content.push(
+        qrStack.length
+          ? {
+              columns: [
+                { width: '*', ...dianTable },
+                { width: 96, alignment: 'right', stack: qrStack },
+              ],
+              columnGap: 4,
+              margin: [0, 10, 0, 8],
+            }
+          : { ...dianTable, margin: [0, 10, 0, 8] },
+      );
     }
 
     const paymentParts: string[] = [];
@@ -580,14 +640,6 @@ export function buildDocDefinition(
       );
     }
 
-    const block: Content = {
-      columns: [
-        { width: '*', stack: dianLeft },
-        { width: 'auto', alignment: 'right', stack: dianRight },
-      ],
-      margin: [0, 0, 0, 6],
-    };
-
     if (paymentParts.length > 0) {
       content.push({
         text: paymentParts.join('  ·  '),
@@ -597,17 +649,15 @@ export function buildDocDefinition(
       });
     }
 
-    content.push(block);
-
     if (invoice.dianStatus === 'RECHAZADA' && invoice.dianErrors?.length) {
       content.push(
-        ...(invoice.dianErrors.map((e): Content => ({
+        ...invoice.dianErrors.map((e): Content => ({
           text: `DIAN: ${e.message ?? 'Error no especificado.'}`,
           fontSize: 8.5,
           bold: true,
           color: '#ec1c24',
           margin: [0, 1, 0, 1],
-        })) as Content[]),
+        })),
       );
       content.push({ text: '', margin: [0, 0, 0, 8] });
     }
