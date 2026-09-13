@@ -45,15 +45,15 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Read: `package.json`
 - Run: `npm run build`, `npx jest`
 
-- [ ] **Step 1: Correr build**
+- [x] **Step 1: Correr build**
   Run: `cd D:\copiFactus\backend; npm run build`
   Expected: exit 0, compila sin errores de tipos.
 
-- [ ] **Step 2: Correr suite completa**
+- [x] **Step 2: Correr suite completa**
   Run: `cd D:\copiFactus\backend; npx jest`
   Expected: 85/85 passing.
 
-- [ ] **Step 3: Registrar el punto de partida**
+- [x] **Step 3: Registrar el punto de partida**
   Run: `git -C D:\copiFactus\backend log --oneline -1`
   Expected: HEAD `064ae18` (último commit estable).
 
@@ -68,23 +68,23 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: `LoginDto` (`email`, `password` MinLength 6).
 - Produces: lista de hallazgos con `severity`, `file:line`, `poc`, `fix`.
 
-- [ ] **Step 1: Revisar secreto JWT y expiración**
+- [x] **Step 1: Revisar secreto JWT y expiración**
   Verificar en `auth.module.ts` que `JWT_SECRET` se valida con fail-fast (>=16 chars, no `dev-jwt-secret`) y revisar `signAsync` — **no hay `expiresIn` explícito** en `auth.service.ts:50`. Confirmar si `JwtModule.register` define `signOptions: { expiresIn }`.
   Output: anotar ausencia/presencia de expiración de token.
 
-- [ ] **Step 2: Revisar enumeración de usuarios en login**
+- [x] **Step 2: Revisar enumeración de usuarios en login**
   Verificar en `auth.service.ts` que mensaje de error es genérico (`Credenciales inválidas.`) tanto para email inexistente como para password incorrecta (ya visto: OK). Revisar `validatePassword` con hash null.
   Output: OK o hallazgo.
 
-- [ ] **Step 3: Revisar timing attack en bcrypt.compare**
+- [x] **Step 3: Revisar timing attack en bcrypt.compare**
   Verificar que el flujo no filtra por mensaje/detalle si email no existe (OK). Anotar que bcrypt.compare solo se llama cuando hay hash (protección estándar).
   Output: OK o nota.
 
-- [ ] **Step 4: Verificar expiración real**
+- [x] **Step 4: Verificar expiración real**
   Buscar `expiresIn` en todo `src/auth` e `invoices`/`quotes` (si existe token de `reset`/`share`). Listar cualquier `signAsync`/`sign(` sin `expiresIn`.
   Output: lista de tokens sin expiración.
 
-- [ ] **Step 5: Commit de hallazgos (documentar, no código)**
+- [x] **Step 5: Commit de hallazgos (documentar, no código)**
   Anotar en `docs/superpowers/plans/2026-09-12-strix-security-review.md` **Results** al final (ver Task 9) o en el reporte de hallazgos. Sin cambio de código: committear el plan actualizado si hubo notas.
 
 ---
@@ -99,19 +99,19 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: `UserRole` enum de Prisma; `AuthUser` (`id`, `email`, `role`, `fullName`).
 - Produces: matriz `rol -> endpoints permitidos`, lista de endpoints que usan solo `CONSULTA` pero exponen datos sensibles.
 
-- [ ] **Step 1: Mapear por qué cada módulo usa `CONSULTA`**
+- [x] **Step 1: Mapear por qué cada módulo usa `CONSULTA`**
   Verificar los módulos que dejan `CONSULTA` ver listados/PDF/dian-xml (invoices 83/98, dian-pdf) — ¿es correcto por negocio?
   Output: matriz.
 
-- [ ] **Step 2: Buscar endpoints sin `@UseGuards` o sin `@Roles`**
+- [x] **Step 2: Buscar endpoints sin `@UseGuards` o sin `@Roles`**
   Grep por controllers sin `@UseGuards(JwtAuthGuard, RolesGuard)` a nivel de clase y sin `@Roles` por handler. Confirmar que solo `POST /auth/login` y `POST /public-inquiries` son públicos de forma intencional.
   Output: lista de endpoints protegidos vs públicos esperados.
 
-- [ ] **Step 3: Verificar que el rol viene del JWT y se revalida contra DB**
+- [x] **Step 3: Verificar que el rol viene del JWT y se revalida contra DB**
   En `jwt.strategy.ts` `validate()` llama a `authService.validateUser` (DB) — verificar que un usuario desactivado pierde acceso. Confirmar `toAuthUser` no incluye datos extra.
   Output: OK o hallazgo.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   Sin código: actualizar el plan si se anotó algo. Si se encontró un endpoint sin proteger, crear tarea de fix (mover a Task 7).
 
 ---
@@ -126,15 +126,15 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: `@Param('id')` / `@CurrentUser() user`.
 - Produces: lista de `id` que se resuelven sin filtrar por algo del usuario/tanque; PoC cross-tenant si aplica (la app es single-tenant por ahora — anotar si el modelo no tiene multi-tenancy).
 
-- [ ] **Step 1: Confirmar modelo de tenancy**
+- [x] **Step 1: Confirmar modelo de tenancy**
   Revisar el schema Prisma (`prisma/schema.prisma`): ¿hay columna tipo `companyId`/`tenantId`? Si la app es single-tenant, documentar que el IDOR cross-tenant NO aplica y la frontera es rol-vs-rol.
   Output: veredicto de tenancy.
 
-- [ ] **Step 2: Revisar resolución de entidades por id**
+- [x] **Step 2: Revisar resolución de entidades por id**
   Leer los `findOne`/`getPdf`/`getDianXml` de invoices, quotes, services, customers, etc. Verificar que el id se pasa a Prisma directo y que el guard protege la ruta. Buscar endpoints que acepten `any` id sin validar formato UUID (Prisma lanza 500?).
   Output: por cada endpoint, confirmación de protección por guard; anotar errores de validación de id no-UUID.
 
-- [ ] **Step 3: Probar id inválido contra API desplegada (black-box)**
+- [x] **Step 3: Probar id inválido contra API desplegada (black-box)**
   Run (un ejemplo, docs en Task 8):
   ```
   curl -s -o NUL -w "%{http_code}" https://copifactushb-back.vercel.app/api/invoices/not-a-uuid
@@ -143,7 +143,7 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
   Expected: 401 (sin token). Con token malo: 401. Sin `Authorization`: 401.
   Output: códigos capturados.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   Anotar hallazgos en el reporte (Task 9). Si se encuentra 500 en lugar de 400 para id no-UUID, llevarlo a Task 7 (fix que devuelve 400/404).
 
 ---
@@ -158,23 +158,23 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: `storagePath`/`fileName` del cliente; `FACTUS_URL` de env.
 - Produces: lista de rutas construidas con input de usuario y veredicto sanitización.
 
-- [ ] **Step 1: Revisar construcción de `path` en presign**
+- [x] **Step 1: Revisar construcción de `path` en presign**
   En `document-attachments.service.ts:50`: `attachments/${entityType}/${entityId}/${Date.now()}-${fileName}`. Verificar si `fileName`/`entityType`/`entityId` se sanitizan (la auditoría previa menciona sanitización con `/[^\w.\-() ]/g -> _` en invoice-uploads). Verificar si `entityType` (enum validated) y `entityId` pueden incluir `/` (path traversal → subir fuera del bucket).
   Output: hallazgo si `entityId`/`fileName` permiten `/` o `..`.
 
-- [ ] **Step 2: Revisar invoice-uploads presign**
+- [x] **Step 2: Revisar invoice-uploads presign**
   Leer `src/invoice-uploads/invoice-uploads.service.ts` y su DTO de presign. Confirmar sanitización idéntica o documentar diferencia.
   Output: OK o hallazgo.
 
-- [ ] **Step 3: Revisar uso de `FACTUS_URL` (SSRF)**
+- [x] **Step 3: Revisar uso de `FACTUS_URL` (SSRF)**
   En `factus-auth.service.ts:68`, fetch a `FACTUS_URL` de env (no de input de usuario) — verificar que ningún endpoint permita al cliente elegir la URL de Factus. Confirmar que el adapter no acepta URL del body.
   Output: OK o hallazgo.
 
-- [ ] **Step 4: Revisar descargas (`getFile`)**
+- [x] **Step 4: Revisar descargas (`getFile`)**
   `document-attachments.controller.ts:31` `GET :id/file` devuelve signed URL — verificar que el id es UUID y se resuelve vía `findOne` (rouca {404}).
   Output: OK o hallazgo.
 
-- [ ] **Step 5: Fix si hay hallazgo, o commit de OK**
+- [x] **Step 5: Fix si hay hallazgo, o commit de OK**
   Si hay path traversal: validar con `class-validator` (`IsUUID` para entityId, sanitizar fileName) y añadir test que lo demuestre. Ver "Task 7" para formato; correr build + jest.
   Commit: `fix(security): sanitizar ruta de storage en presign de adjuntos`.
 
@@ -190,23 +190,23 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: campos del cliente (nombre de cliente, notas, dirección, comentarios).
 - Produces: veredicto de uso de Prisma no-raw (SQL injection) y de escape en HTML.
 
-- [ ] **Step 1: Verificar que NO hay raw SQL**
+- [x] **Step 1: Verificar que NO hay raw SQL**
   Grep en `src` por `$queryRaw|$executeRaw|prisma.$executeRawUnsafe`.
   Output: lista vacía = OK.
 
-- [ ] **Step 2: Verificar escape en emails**
+- [x] **Step 2: Verificar escape en emails**
   Confirmar en `branded-email.template.ts` que todos los valores interpolados (title, subtitle, rows[].value, total, status, DIAN, cta, footer, logo HREF) pasan por `escapeHtml` (los tests ya lo prueban — line 183 CTA con `<script>`). Listar cualquier interpolarización sin escape.
   Output: OK o hallazgo.
 
-- [ ] **Step 3: Auditar mass assignment en updates**
+- [x] **Step 3: Auditar mass assignment en updates**
   Revisar `@ValidationPipe` global (`whitelist: true, forbidNonWhitelisted: true`) — ya cubre. Verificar DTOs de PATCH (customers, services, settings, users) que solo reciben campos `@IsOptional` explícitos (no `any`).
   Output: OK o hallazgo.
 
-- [ ] **Step 4: Verificar audit no loguea secretos**
+- [x] **Step 4: Verificar audit no loguea secretos**
   Confirmar que `audit.service.ts` loguea `newValue` serializado y que ningún DTO que llega a audit incluye `password`. Usuarios: confirmar que `create` de admin hashea con `hashPassword` antes de persistir.
   Output: OK o hallazgo.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   Si todo OK, sin commit de código (o commit documental si hubo nota). Si hay hallazgo, crear fix + test en Task 7.
 
 ---
@@ -223,7 +223,7 @@ No se crean módulos nuevos. Trabajo sobre archivos existentes (solo los que un 
 - Consumes: hallazgo con severidad, punto exacto y PoC.
 - Produces: fix + test verde + build verde.
 
-- [ ] **Step 1: Escribir test que falle**
+- [x] **Step 1: Escribir test que falle**
 
 ```typescript
 // Ejemplo si el hallazgo es path traversal en presign
@@ -234,12 +234,12 @@ it('rechaza fileName con path traversal en presign', async () => {
 });
 ```
 
-- [ ] **Step 2: Correr test para verificar que falla**
+- [x] **Step 2: Correr test para verificar que falla**
 
 Run: `npx jest src/document-attachments --testPathPattern=presign -t "path traversal"`
 Expected: FAIL (la ruta se construye sin rechazo).
 
-- [ ] **Step 3: Implementar fix mínimo en el service (o DTO)**
+- [x] **Step 3: Implementar fix mínimo en el service (o DTO)**
 
 ```typescript
 private sanitizeFileName(fileName: string): string {
@@ -247,17 +247,17 @@ private sanitizeFileName(fileName: string): string {
 }
 ```
 
-- [ ] **Step 4: Correr test para verificar que pasa**
+- [x] **Step 4: Correr test para verificar que pasa**
 
 Run: `npx jest src/document-attachments`
 Expected: PASS.
 
-- [ ] **Step 5: Build + suite completa**
+- [x] **Step 5: Build + suite completa**
 
 Run: `npm run build; npx jest`
 Expected: build OK, 85/85 + nuevos tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C D:\copiFactus\backend add -A
@@ -271,23 +271,23 @@ git -C D:\copiFactus\backend commit -m "fix(security): <descripción del hallazg
 **Files:**
 - Run: curl contra `https://copifactushb-back.vercel.app/api`
 
-- [ ] **Step 1: Verificar prefijo y CORS**
+- [x] **Step 1: Verificar prefijo y CORS**
   ```
   curl -s -o NUL -w "%{http_code}" https://copifactushb-back.vercel.app/api/auth/login
   curl -s -o NUL -w "%{http_code}" https://copifactushb-back.vercel.app/api/dashboard/kanban
   ```
   Expected: 400 (login sin body) / 401 (sin token). Confirmar que no devuelve HTML de 404 del serverless.
 
-- [ ] **Step 2: Verificar rate limit visible**
+- [x] **Step 2: Verificar rate limit visible**
   Send 101 requests a un endpoint público (public-inquiries) en <60s y confirmar 429 desde aproximadamente req 101, o confirmar el header `Retry-After`/`X-RateLimit`.
 
-- [ ] **Step 3: Verificar headers de seguridad**
+- [x] **Step 3: Verificar headers de seguridad**
   ```
   curl -sI https://copifactushb-back.vercel.app/api/health  (o login)
   ```
   Expected: `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy` de Helmet presentes.
 
-- [ ] **Step 4: Confirmar que se sirve HTTPS y sin server header sensible**
+- [x] **Step 4: Confirmar que se sirve HTTPS y sin server header sensible**
   Confirmar que `Server` no filtra versión de Node/Express. Anotar hallazgo si se expone.
 
 ---
@@ -298,21 +298,21 @@ git -C D:\copiFactus\backend commit -m "fix(security): <descripción del hallazg
 - Create: `docs/security-audit-2026-09-12-strix.md`
 - Modify: `docs/superpowers/plans/2026-09-12-strix-security-review.md` (Results)
 
-- [ ] **Step 1: Escribir reporte de hallazgos**
+- [x] **Step 1: Escribir reporte de hallazgos**
   Tabla con: `#`, `CWE`, `severity`, `endpoint/archivo:línea`, `PoC`, `estado` (corregido/aceptado/NA).
 
-- [ ] **Step 2: Build + tests finales**
+- [x] **Step 2: Build + tests finales**
   Run: `npm run build; npx jest`
   Expected: build OK, 85/85 (o más si hubo fixes).
 
-- [ ] **Step 3: Commit del reporte**
+- [x] **Step 3: Commit del reporte**
 
 ```bash
 git -C D:\copiFactus\backend add -A
 git -C D:\copiFactus\backend commit -m "docs(security): reporte de revisión strix/ecc 2026-09-12"
 ```
 
-- [ ] **Step 4: Push a main y verificar deploy**
+- [x] **Step 4: Push a main y verificar deploy**
 
 ```bash
 git -C D:\copiFactus\backend push origin main
@@ -320,3 +320,25 @@ gh run watch <run-id>
 ```
 
 Expected: deploy en Vercel en verde.
+
+---
+
+## Results
+
+**Estado:** COMPLETO — ejecutado en una sesión; todos los checkbox marcados.
+
+- Baseline: build OK, 85/85 tests, HEAD `064ae18`.
+- **Tarea 1 (auth):** OK — JWT `expiresIn=8h` vía `JWT_EXPIRES_IN` (default), mensaje de login genérico, bcrypt, fail-fast secreto débil. Nota: `jwt.strategy.ts` verifica con `supabaseSecret ?? jwtSecret`; `SUPABASE_JWT_SECRET` no está seteado (safe).
+- **Tarea 3 (acceso):** OK — todo protegido por `JwtAuthGuard + RolesGuard` a nivel de clase; públicos solo `POST /auth/login` y `POST /public-inquiries` (throttle 5/60s). Rol revalidado contra DB en `validate()`.
+- **Tarea 4 (IDOR):** NA — modelo single-tenant (sin `companyId`/`tenantId` en schema); frontera rol-vs-rol. Black-box: `/api/invoices/{uuid|malo}` y `/api/dashboard/kanban` → 401 sin token.
+- **Tarea 5 (presign/SSRF):** 2 hallazgos corregidos (TDD, commit `2918de8`):
+  - **H1 Path traversal** en `document-attachments.service.ts:50`: `entityType`/`entityId`/`fileName` sin sanitizar → ahora valida enum + `/^[A-Za-z0-9-]+$/` + `sanitizeFileName`; `create()` exige bucket `document-attachments` y rechaza `..`.
+  - **H2 Bucket arbitrario** en `invoice-uploads.service.ts`: `storagePath` aceptaba cualquier bucket (leer adjuntos privados) → ahora exige `invoice-pdfs` y rechaza `..`.
+  - SSRF: `FACTUS_URL` viene de env, no del cliente → OK.
+- **Tarea 6 (inyección/XSS):** OK — `$queryRaw` parametrizados (4 usos), emails con `escapeHtml`, ValidationPipe global `whitelist+forbidNonWhitelisted`, audit sin `passwordHash`.
+- **Tarea 7 (fix):** 11 tests nuevos (8 attachments + 3 uploads).
+- **Tarea 8 (smokescreen):** headers Helmet completos en OPTIONS login (CSP, HSTS, nosniff, COOP/CORP, X-Frame-Options), `Server: Vercel` sin versión; rate limit confirmado (5×201 + 75×429 en public-inquiries).
+- **Verificación final:** build OK, **96/96 tests**, push `064ae18..2918de8`, deploy Vercel verde (`gh run 34739155290`).
+- Informe: `docs/security-audit-2026-09-12-strix.md`.
+
+**Notas operativas:** quedaron 5 `public_inquiries` de prueba (`t@t.co`) en la DB de producción generadas por el test de rate limit — limpiar o aceptar. Lint no es gate (deuda ~742 pre-existente).
