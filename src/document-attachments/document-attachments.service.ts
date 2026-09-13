@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
-import { CreateAttachmentDto } from './dto/create-attachment.dto';
+import {
+  AttachmentEntityType,
+  CreateAttachmentDto,
+} from './dto/create-attachment.dto';
 
 @Injectable()
 export class DocumentAttachmentsService {
@@ -31,6 +34,15 @@ export class DocumentAttachmentsService {
   }
 
   async create(dto: CreateAttachmentDto, userId: string) {
+    const [bucket, ...rest] = dto.storagePath.split('/');
+    const objectPath = rest.join('/');
+    if (!bucket || bucket !== this.BUCKET || !objectPath) {
+      throw new BadRequestException('storagePath inválido.');
+    }
+    if (objectPath.includes('..')) {
+      throw new BadRequestException('storagePath inválido.');
+    }
+
     return this.prisma.documentAttachment.create({
       data: {
         entityType: dto.entityType,
@@ -46,8 +58,27 @@ export class DocumentAttachmentsService {
   }
 
   async presignUpload(fileName: string, entityType: string, entityId: string) {
+    const type = Object.values(AttachmentEntityType).includes(
+      entityType as AttachmentEntityType,
+    )
+      ? entityType
+      : null;
+    if (!type) {
+      throw new BadRequestException('Tipo de entidad no válido.');
+    }
+
+    const cleanId = (entityId ?? '').trim();
+    if (!/^[A-Za-z0-9-]+$/.test(cleanId)) {
+      throw new BadRequestException('Id de entidad no válido.');
+    }
+
+    const cleanName = this.sanitizeFileName(fileName);
+    if (!cleanName) {
+      throw new BadRequestException('Nombre de archivo no válido.');
+    }
+
     await this.supabase.ensureBucket(this.BUCKET);
-    const path = `attachments/${entityType}/${entityId}/${Date.now()}-${fileName}`;
+    const path = `attachments/${type}/${cleanId}/${Date.now()}-${cleanName}`;
     const url = await this.supabase.presignUploadUrl(this.BUCKET, path);
     return { url, path };
   }
@@ -64,5 +95,13 @@ export class DocumentAttachmentsService {
       .storage.from(this.BUCKET)
       .remove([attachment.filePath]);
     return this.prisma.documentAttachment.delete({ where: { id } });
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    return (fileName ?? '')
+      .replace(/[^\w.\-() ]/g, '_')
+      .replace(/\.{2,}/g, '_')
+      .trim()
+      .slice(0, 255);
   }
 }

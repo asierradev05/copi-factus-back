@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import { DocumentType, UserRole } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { PrismaModule } from '../database/prisma.module';
 import { AuditModule } from '../audit/audit.module';
@@ -118,5 +119,60 @@ describe('InvoiceUploadsService (customer association)', () => {
 
     const found = await service.findOne(upload.id);
     expect(found?.customer?.id).toBe(customerId);
+  });
+});
+
+describe('InvoiceUploadsService.create (storagePath validation)', () => {
+  let service: InvoiceUploadsService;
+  const downloadAsBuffer = jest.fn();
+  const prismaCreate = jest.fn();
+
+  beforeEach(() => {
+    downloadAsBuffer.mockReset();
+    downloadAsBuffer.mockResolvedValue(Buffer.from('fake pdf'));
+    prismaCreate.mockReset();
+    prismaCreate.mockResolvedValue({ id: 'upload-1', fileName: 'factura.pdf' });
+
+    const supabase = { downloadAsBuffer } as unknown as SupabaseService;
+    const prisma = {
+      invoiceUpload: { create: prismaCreate },
+      $transaction: jest.fn(),
+    } as unknown as PrismaService;
+
+    service = new InvoiceUploadsService(
+      prisma,
+      { log: jest.fn().mockResolvedValue(undefined) } as never,
+      supabase,
+    );
+  });
+
+  const dto = {
+    fileName: 'factura.pdf',
+    fileSize: 1000,
+    storagePath: 'invoice-pdfs/abc.pdf',
+  };
+
+  it('rechaza storagePath que apunta a otro bucket', async () => {
+    await expect(
+      service.create(
+        { ...dto, storagePath: 'document-attachments/x.pdf' },
+        'user-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(downloadAsBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rechaza storagePath con traversal (..)', async () => {
+    await expect(
+      service.create({ ...dto, storagePath: 'invoice-pdfs/../evil.pdf' }, 'user-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(downloadAsBuffer).not.toHaveBeenCalled();
+  });
+
+  it('descarga desde el bucket correcto cuando storagePath es válido', async () => {
+    await expect(
+      service.create(dto, 'user-1'),
+    ).resolves.toBeDefined();
+    expect(downloadAsBuffer).toHaveBeenCalledWith('invoice-pdfs', 'abc.pdf');
   });
 });

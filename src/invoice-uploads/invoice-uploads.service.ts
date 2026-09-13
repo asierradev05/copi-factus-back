@@ -97,7 +97,10 @@ export class InvoiceUploadsService {
     const safeName = dto.fileName.replace(/[^\w.\-() ]/g, '_');
     const [bucket, ...rest] = dto.storagePath.split('/');
     const objectPath = rest.join('/');
-    if (!bucket || !objectPath) {
+    if (!objectPath || bucket !== BUCKET) {
+      throw new BadRequestException('storagePath inválido.');
+    }
+    if (objectPath.includes('..')) {
       throw new BadRequestException('storagePath inválido.');
     }
 
