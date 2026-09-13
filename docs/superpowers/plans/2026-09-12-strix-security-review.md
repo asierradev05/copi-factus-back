@@ -341,4 +341,19 @@ Expected: deploy en Vercel en verde.
 - **Verificación final:** build OK, **96/96 tests**, push `064ae18..2918de8`, deploy Vercel verde (`gh run 34739155290`).
 - Informe: `docs/security-audit-2026-09-12-strix.md`.
 
+## Segunda pasada (2026-09-12): revisión de acceso y hardening (petición del usuario)
+
+Revisión de 8 puntos (IDOR, CORS, archivos, queries DB, localStorage, permisos frontend, rate limiting, validación server). Veredicto detallado en el reporte final. Resultados:
+
+- **IDOR:** NA (single-tenant, H4). `/users` y `/audit` ADMIN-only; 22/22 controllers protegidos.
+- **CORS:** restringido (probes black-box: evil bloqueado). ⚠️ `www.copigraficassierra.com` no está en el allowlist desplegado → ajustar `CORS_ORIGIN` de Vercel al activar la web pública.
+- **Archivos:** invoice-uploads OK (50MB, `.pdf` forzado). Adjuntos sin límite → **H6 corregido**: `assertFileAllowed()` (máx 10MB, whitelist ext: pdf/doc/docx/png/jpg/jpeg/gif/webp/bmp; MIME: pdf/doc/docx/image/*) en `presignUpload` y `create`. 5 tests nuevos (4 red + 1 caso feliz), commit `d76caf9`.
+- **Queries:** 4 `$queryRaw` parametrizados, sin SQLi.
+- **localStorage:** JWT exfiltrable ante XSS (aceptado, H5); sin `dangerouslySetInnerHTML`; CSP; expiración 8h; `/auth/me` revalida rol.
+- **Frontend permisos:** sólo UX; enforcement real en `RolesGuard` (correcto).
+- **Rate limit:** global 100/min + public 5/60s; `login` sin throttle específico (mejora opcional `@Throttle` 10/min).
+- **Validación server:** ValidationPipe global `whitelist+forbidNonWhitelisted` + DTOs + filtro Prisma→4xx.
+
+**Verificación final 2ª pasada:** build OK, **101/101 tests**, push `c3d07e4..d76caf9`, deploy Vercel verde (`gh run 34740199369`). Acciones pendientes (no-bloqueantes): CORS de la web pública + throttle login.
+
 **Notas operativas:** quedaron 5 `public_inquiries` de prueba (`t@t.co`) en la DB de producción generadas por el test de rate limit — limpiar o aceptar. Lint no es gate (deuda ~742 pre-existente).
