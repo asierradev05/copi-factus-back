@@ -22,6 +22,7 @@
     "db:migrate": "prisma migrate dev",
     "backfill:password-hashes": "ts-node scripts/backfill-password-hashes.ts",
     "ensure:storage": "ts-node scripts/ensure-storage-bucket.ts",
+    "upload:email-assets": "ts-node scripts/upload-email-assets.ts",
     "migrate:uploads": "ts-node scripts/migrate-uploads-to-storage.ts"
   },
   "prisma": {
