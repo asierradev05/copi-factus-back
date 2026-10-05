@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InvoiceStatus, ServiceStatus } from '@prisma/client';
+import { DianStatus, InvoiceStatus, ServiceStatus } from '@prisma/client';
+import { summarizeSales } from './reports.summarize';
 import { Decimal } from '@prisma/client/runtime/client';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -18,11 +19,15 @@ export class ReportsService {
   async getSalesReport(query: SalesReportQueryDto) {
     const where: {
       status: { notIn: InvoiceStatus[] };
+      dianStatus: { not: DianStatus };
       issueDate?: { gte?: Date; lte?: Date };
     } = {
       status: {
         notIn: [InvoiceStatus.BORRADOR, InvoiceStatus.CANCELADA],
       },
+      // Un documento rechazado por la DIAN no es una venta, aunque su estado
+      // interno quedara como no borrador.
+      dianStatus: { not: DianStatus.RECHAZADA },
     };
 
     if (query.from || query.to) {
@@ -41,25 +46,22 @@ export class ReportsService {
       orderBy: { issueDate: 'desc' },
     });
 
-    let totalSales = new Decimal(0);
-    let totalCollected = new Decimal(0);
-    let totalPending = new Decimal(0);
-
-    for (const invoice of invoices) {
-      totalSales = totalSales.add(invoice.total);
-      totalCollected = totalCollected.add(invoice.paidAmount);
-      totalPending = totalPending.add(invoice.balance);
-    }
+    const summary = summarizeSales(invoices);
 
     return {
       period: { from: query.from ?? null, to: query.to ?? null },
-      invoiceCount: invoices.length,
-      totalSales: totalSales.toFixed(2),
-      totalCollected: totalCollected.toFixed(2),
-      totalPending: totalPending.toFixed(2),
+      invoiceCount: summary.invoiceCount,
+      invoiceTotal: summary.invoiceTotal,
+      creditNotesTotal: summary.creditNotesTotal,
+      debitNotesTotal: summary.debitNotesTotal,
+      totalSales: summary.netSales,
+      netSales: summary.netSales,
+      totalCollected: summary.totalCollected,
+      totalPending: summary.totalPending,
       invoices: invoices.map((inv) => ({
         id: inv.id,
         invoiceNumber: inv.invoiceNumber,
+        documentKind: inv.documentKind,
         customer: inv.customer.name,
         issueDate: inv.issueDate,
         total: inv.total.toFixed(2),
