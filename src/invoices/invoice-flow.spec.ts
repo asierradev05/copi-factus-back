@@ -185,7 +185,7 @@ describe('Invoice Flow Integration', () => {
         reference: 'TEST-PARTIAL',
       },
       actorId,
-    )) as RegisteredPayment;
+    )) as unknown as RegisteredPayment;
     expect(partialPayment.updatedInvoice.status).toBe(
       InvoiceStatus.PARCIALMENTE_PAGADA,
     );
@@ -204,7 +204,7 @@ describe('Invoice Flow Integration', () => {
         reference: 'TEST-FULL',
       },
       actorId,
-    )) as RegisteredPayment;
+    )) as unknown as RegisteredPayment;
     expect(fullPayment.updatedInvoice.status).toBe(InvoiceStatus.PAGADA);
     expect(fullPayment.updatedInvoice.balance.toNumber()).toBe(0);
     expect(fullPayment.updatedInvoice.paidAmount.toNumber()).toBe(59500);

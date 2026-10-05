@@ -13,8 +13,9 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
 
   let actorId: string;
   let customerId: string;
-  let dooId: string;
-  let invoiceId: string;
+  let dooId: string | undefined;
+  // Opcional: `afterAll` lo limpia solo si llego a crearse.
+  let invoiceId: string | undefined;
   let dooCounter = 0;
 
   const testSuffix = Date.now().toString();
@@ -50,7 +51,8 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
       },
     });
     customerId = customer.id;
-  });
+    // El montage contra una base remota no cabe en el default de 5s.
+  }, 120000);
 
   afterAll(async () => {
     if (invoiceId) {
@@ -69,7 +71,9 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
     if (actorId) {
       await prisma.profile.delete({ where: { id: actorId } }).catch(() => {});
     }
-  });
+    // Los borrados son secuenciales contra una base remota: el default de 5s
+    // de Jest para hooks no alcanza.
+  }, 180000);
 
   const baseItems = [
     { description: 'Láminas', quantity: 10, unitPrice: 2000, taxRate: 19 },
@@ -133,7 +137,7 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
 
     it('completa la entrega en el segundo despacho y pasa a ENTREGADA', async () => {
       const updated = await service.registerDelivery(
-        dooId,
+        dooId!,
         {
           items: [
             { description: 'Láminas', quantity: 6 },
@@ -171,7 +175,7 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
     it('rechaza una descripción fuera de los ítems de la orden', async () => {
       await expect(
         service.registerDelivery(
-          dooId,
+          dooId!,
           { items: [{ description: 'Obsequio', quantity: 1 }] },
           actorId,
         ),
@@ -307,7 +311,7 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
 
     it('crece una factura BORRADOR con los despachos siguientes', async () => {
       await service.registerDelivery(
-        dooId,
+        dooId!,
         {
           items: [
             { description: 'Láminas', quantity: 6 },
@@ -322,7 +326,7 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
         select: { invoiceId: true },
       });
 
-      const invoice = await service.syncInvoiceFromDeliveries(dooId, actorId);
+      const invoice = await service.syncInvoiceFromDeliveries(dooId!, actorId);
 
       expect(invoice.id).toBe(linked?.invoiceId);
       expect(invoice.items).toHaveLength(2);
@@ -362,7 +366,7 @@ describe('DeliveryOrdersService (entregas parciales)', () => {
 
       expect(invoice.status).toBe('EMITIDA');
       expect(Number(invoice.items[0].quantity)).toBe(4);
-    });
+    }, 60000);
 
     it('rechaza facturar una orden cancelada', async () => {
       dooId = await createDoo();

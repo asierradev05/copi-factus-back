@@ -5,10 +5,12 @@ import {
   escapeHtml,
   RED_COLOR,
   renderBrandedEmail,
+  type BrandedEmailAssets,
 } from './branded-email.template';
 
 describe('renderBrandedEmail', () => {
-  const assets = {
+  // El tipo explicito fija la tupla de tres iconos que el renderer exige.
+  const assets: BrandedEmailAssets = {
     banner: 'https://cdn.test/banner.jpeg',
     hero: 'https://cdn.test/hero.png',
     bgCta: 'https://cdn.test/bg-conocerte.png',
@@ -40,9 +42,9 @@ describe('renderBrandedEmail', () => {
 
     expect(html).toContain(assets.banner);
     expect(html).toContain('data:image/png;base64,LOGO');
-    expect(html).toContain(assets.social.facebook);
-    expect(html).toContain(assets.social.whatsapp);
-    expect(html).toContain(assets.social.website);
+    expect(html).toContain(assets.social!.facebook);
+    expect(html).toContain(assets.social!.whatsapp);
+    expect(html).toContain(assets.social!.website);
     expect(html).toContain('www.facebook.com/profile.php?id=61566315975069');
   });
 
@@ -52,7 +54,9 @@ describe('renderBrandedEmail', () => {
       logoBase64: 'data:image/png;base64,LOGO',
     });
 
-    expect(html.split('data:image/png;base64,LOGO').length).toBeGreaterThanOrEqual(2);
+    expect(
+      html.split('data:image/png;base64,LOGO').length,
+    ).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain(assets.logo);
   });
 
@@ -128,9 +132,9 @@ describe('renderBrandedEmail', () => {
     expect(html).toContain('Impresión personalizada');
     expect(html).toContain('Promocionales Personalizados');
     expect(html).toContain('Marketing Digital');
-    expect(html).toContain(assets.icons[0]);
-    expect(html).toContain(assets.icons[1]);
-    expect(html).toContain(assets.icons[2]);
+    expect(html).toContain(assets.icons![0]);
+    expect(html).toContain(assets.icons![1]);
+    expect(html).toContain(assets.icons![2]);
   });
 
   it('muestra los dos botones al estilo Brevo (Portafolio y WhatsApp)', () => {
@@ -140,9 +144,7 @@ describe('renderBrandedEmail', () => {
     expect(html).toContain('Hablemos sobre tu idea por WhatsApp');
     expect(html).toContain(BRAND_BLUE);
     expect(html).toContain(BRAND_GREEN);
-    expect(html).toContain(
-      'https://api.whatsapp.com/send?phone=573102586169',
-    );
+    expect(html).toContain('https://api.whatsapp.com/send?phone=573102586169');
     expect(html).toContain('www.copigraficassierra.com');
   });
 

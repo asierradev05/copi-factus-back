@@ -2,7 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { DocumentAttachmentsService } from './document-attachments.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { PrismaService } from '../database/prisma.service';
-import { CreateAttachmentDto } from './dto/create-attachment.dto';
+import {
+  AttachmentEntityType,
+  CreateAttachmentDto,
+} from './dto/create-attachment.dto';
 
 describe('DocumentAttachmentsService', () => {
   let service: DocumentAttachmentsService;
@@ -79,15 +82,19 @@ describe('DocumentAttachmentsService', () => {
 
   describe('create', () => {
     const base: CreateAttachmentDto = {
-      entityType: 'invoice',
+      entityType: AttachmentEntityType.INVOICE,
       entityId: '11111111-2222-3333-4444-555555555555',
       fileName: 'factura.pdf',
-      storagePath: 'document-attachments/invoice/11111111-2222-3333-4444-555555555555/123-factura.pdf',
+      storagePath:
+        'document-attachments/invoice/11111111-2222-3333-4444-555555555555/123-factura.pdf',
     };
 
     it('rechaza storagePath con bucket distinto al de adjuntos', async () => {
       await expect(
-        service.create({ ...base, storagePath: 'invoice-pdfs/x.pdf' }, 'user-1'),
+        service.create(
+          { ...base, storagePath: 'invoice-pdfs/x.pdf' },
+          'user-1',
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prismaCreate).not.toHaveBeenCalled();
     });
@@ -110,7 +117,7 @@ describe('DocumentAttachmentsService', () => {
       expect(result).toEqual({ id: 'attachment-1' });
       expect(prismaCreate).toHaveBeenCalledWith({
         data: {
-          entityType: 'invoice',
+          entityType: AttachmentEntityType.INVOICE,
           entityId: '11111111-2222-3333-4444-555555555555',
           fileName: 'factura.pdf',
           filePath: base.storagePath,
@@ -138,7 +145,10 @@ describe('DocumentAttachmentsService', () => {
 
     it('rechaza un archivo con mimeType peligroso', async () => {
       await expect(
-        service.create({ ...base, mimeType: 'application/x-msdownload' }, 'user-1'),
+        service.create(
+          { ...base, mimeType: 'application/x-msdownload' },
+          'user-1',
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prismaCreate).not.toHaveBeenCalled();
     });
