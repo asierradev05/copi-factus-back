@@ -13,6 +13,12 @@ import {
   UpdateProductDto,
 } from './dto/product.dto';
 
+/** Los codigos UN/CE se emiten en mayusculas; `kgm` no es un codigo valido. */
+function normalizeUnceCode(code?: string): string | undefined {
+  const trimmed = code?.trim().toUpperCase();
+  return trimmed ? trimmed : undefined;
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -27,7 +33,11 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
-      isActive: true,
+      // Por defecto solo activos: los selectores de factura y cotizacion no
+      // deben ofrecer productos dados de baja. Un admin si puede pedir
+      // `isActive=false` para localizarlos, porque `remove` marca `deletedAt` y
+      // eso los oculta de forma permanente, sin vuelta atras por la API.
+      isActive: filters.isActive ?? true,
     };
 
     if (filters.search) {
@@ -79,6 +89,9 @@ export class ProductsService {
         description: dto.description?.trim(),
         unitPrice: toDecimal(dto.unitPrice),
         taxRate: toDecimal(dto.taxRate ?? 0),
+        unitMeasureCode: normalizeUnceCode(dto.unitMeasureCode),
+        standardCode: normalizeUnceCode(dto.standardCode),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
     });
 
@@ -125,6 +138,13 @@ export class ProductsService {
         ...(dto.taxRate !== undefined
           ? { taxRate: toDecimal(dto.taxRate) }
           : {}),
+        ...(dto.unitMeasureCode !== undefined
+          ? { unitMeasureCode: normalizeUnceCode(dto.unitMeasureCode) }
+          : {}),
+        ...(dto.standardCode !== undefined
+          ? { standardCode: normalizeUnceCode(dto.standardCode) }
+          : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
     });
 
