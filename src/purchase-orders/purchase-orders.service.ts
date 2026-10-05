@@ -221,7 +221,7 @@ export class PurchaseOrdersService {
         purchaseOrderId: po.id,
         scheduledAt: po.expectedDate ?? new Date(),
         items: items.map((item) => ({
-          description: item.description,
+          description: item.description.trim(),
           quantity: Number(item.quantity.toFixed(2)),
           unitPrice: item.unitPrice ? Number(item.unitPrice.toFixed(2)) : 0,
         })),
