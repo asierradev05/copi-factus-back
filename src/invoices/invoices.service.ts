@@ -37,12 +37,24 @@ import {
   sumDecimals,
   toDecimal,
 } from '../common/utils/money.util';
-import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
+import {
+  isOverdue,
+  resolveInvoiceStatus,
+} from '../common/utils/invoice-status.util';
+import {
+  applyCreditToInvoice,
+  isNoteSourceStatus,
+} from '../common/utils/invoice-credit.util';
 import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { FactusAuthService } from '../factus/factus-auth.service';
 import { FactusAdapterService } from '../factus/factus-adapter.service';
 import { FactusEmissionService } from '../factus/factus-emission.service';
 import { FactusApiException } from '../factus/factus-api.exception';
+import {
+  assertResolutionMatchesConfig,
+  resolveNoteRangeId,
+} from '../factus/note-range.config';
+import { extractCufe, extractCude } from '../factus/dian-response.util';
 import {
   generateReferenceCode,
   mapResolutionTypeToDian,
@@ -184,6 +196,10 @@ export class InvoicesService {
           purchaseOrders: true,
           deliveryOrders: true,
           redSource: { include: { customer: true } },
+          noteChildren: {
+            include: { customer: true, items: true },
+            orderBy: { createdAt: 'desc' },
+          },
           resolution: true,
         },
       });
@@ -239,6 +255,8 @@ export class InvoicesService {
               subtotal: item.subtotal,
               taxAmount: item.taxAmount,
               total: item.total,
+              unitMeasureCode: item.unitMeasureCode,
+              standardCode: item.standardCode,
             })),
           },
         },
@@ -308,9 +326,9 @@ export class InvoicesService {
         'La factura aún no fue validada ante la DIAN. Emítela antes de generar la nota.',
       );
     }
-    if (source.status !== InvoiceStatus.EMITIDA) {
+    if (!isNoteSourceStatus(source.status)) {
       throw new BadRequestException(
-        'Solo se pueden generar notas sobre facturas emitidas.',
+        'Solo se pueden generar notas sobre facturas emitidas o pagadas.',
       );
     }
 
@@ -340,6 +358,8 @@ export class InvoicesService {
       subtotal: Decimal;
       taxAmount: Decimal;
       total: Decimal;
+      unitMeasureCode?: string | null;
+      standardCode?: string | null;
     }> = selected.map((item: any) => {
       const { subtotal, taxAmount, total } = calculateLineTotal(
         Number(item.quantity ?? 0),
@@ -357,28 +377,33 @@ export class InvoicesService {
         subtotal,
         taxAmount,
         total,
+        unitMeasureCode: item.unitMeasureCode ?? null,
+        standardCode: item.standardCode ?? null,
       };
     });
     const totals = this.computeInvoiceTotals(computedItems);
 
     const sourceTotal = Number(source.total ?? 0);
     if (kind === InvoiceKind.NOTA_CREDITO) {
-      const credited = await this.prisma.invoice
-        .aggregate({
-          where: {
-            redSourceId: source.id,
-            documentKind: InvoiceKind.NOTA_CREDITO,
-            status: { in: [InvoiceStatus.BORRADOR, InvoiceStatus.EMITIDA] },
-          },
-          _sum: { total: true },
-        })
-        .then((r) => Number(r._sum?.total ?? 0))
-        .catch(() => 0);
+      const credited = Number(
+        (
+          await this.prisma.invoice.aggregate({
+            where: {
+              redSourceId: source.id,
+              documentKind: InvoiceKind.NOTA_CREDITO,
+              status: { notIn: [InvoiceStatus.CANCELADA] },
+            },
+            _sum: { total: true },
+          })
+        )._sum?.total ?? 0,
+      );
       if (credited + Number(totals.total) > sourceTotal) {
         throw new BadRequestException(
           `El total de notas crédito (${(
             credited + Number(totals.total)
-          ).toLocaleString('es-CO')}) supera el de la factura original (${sourceTotal.toLocaleString('es-CO')}).`,
+          ).toLocaleString(
+            'es-CO',
+          )}) supera el de la factura original (${sourceTotal.toLocaleString('es-CO')}).`,
         );
       }
       if (Number(totals.total) > sourceTotal) {
@@ -427,6 +452,12 @@ export class InvoicesService {
               subtotal: item.subtotal,
               taxAmount: item.taxAmount,
               total: item.total,
+              // La nota replica la unidad y la rama de la linea que credita: si
+              // se dejaran en null, el payload caeria al default "94"
+              // (UNIDAD) y la DIAN recibiria una NC en KG creditando una linea
+              // en KG declarada como UNIDAD, que rechaza.
+              unitMeasureCode: item.unitMeasureCode,
+              standardCode: item.standardCode,
             })),
           },
         },
@@ -502,12 +533,12 @@ export class InvoicesService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    if (existing) return existing;
+    if (existing) {
+      assertResolutionMatchesConfig(existing, process.env, kind);
+      return existing;
+    }
 
-    const rangeId =
-      kind === 'NOTA_CREDITO'
-        ? Number(process.env.FACTUS_NC_RANGE_ID ?? 390)
-        : Number(process.env.FACTUS_ND_RANGE_ID ?? 391);
+    const rangeId = resolveNoteRangeId(kind);
 
     return this.prisma.resolution.create({
       data: {
@@ -656,6 +687,7 @@ export class InvoicesService {
       });
 
     const dianStatus = this.factusEmission.determineDianStatus(data);
+    const rejected = dianStatus === DianStatus.RECHAZADA;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const rows = await tx.invoice.updateMany({
@@ -668,10 +700,14 @@ export class InvoicesService {
           invoiceNumber: data.number,
           factusNumber: data.number,
           issueDate: new Date(),
-          status: InvoiceStatus.EMITIDA,
+          // Una nota rechazada no es un documento emitido: se conserva el
+          // numero que devolvio Factus para trazabilidad, pero el estado
+          // interno vuelve a borrador para que el usuario corrija y reintente.
+          status: rejected ? InvoiceStatus.BORRADOR : InvoiceStatus.EMITIDA,
           resolutionId: full.resolution?.id ?? null,
           ambient: full.ambient,
-          cufe: data.cufe ?? null,
+          cufe: extractCufe(data),
+          cude: extractCude(data),
           dianStatus,
           validatedAt: parseFactusDate(data.validated_at) ?? new Date(),
           qrUrl: links.qr ?? links.url_qr_code ?? null,
@@ -687,7 +723,7 @@ export class InvoicesService {
       });
       if (rows.count === 0) return { count: 0 };
 
-      if (full.resolution?.id) {
+      if (full.resolution?.id && !rejected) {
         await tx.resolution.update({
           where: { id: full.resolution.id },
           data: { next: { increment: 1 } },
@@ -701,28 +737,45 @@ export class InvoicesService {
       );
     }
 
-const updated = await this.prisma.invoice.findUnique({
+    const updated = await this.prisma.invoice.findUnique({
       where: { id: existing.id },
       include: { items: true, customer: true },
     });
     if (!updated) throw new NotFoundException('Nota no encontrada.');
 
     const noteTotal = Number(data?.totals?.total ?? Number(full.total ?? 0));
-    const sourceUnpaid = Number(source.paidAmount ?? 0) <= 0;
-    if (
-      kind === 'NOTA_CREDITO' &&
-      noteTotal >= Number(source.total ?? 0) &&
-      sourceUnpaid
-    ) {
-      await this.prisma.invoice
-        .update({
+
+    // Modelo B: la nota credito se aplica a su factura origen. El saldo baja y,
+    // si el credito lo supera, el excedente queda como saldo a favor del
+    // cliente para compensar en su proxima factura.
+    //
+    // Si la DIAN rechazo la nota esto no se ejecuta: un documento sin valor
+    // legal no puede descontarle saldo al cliente.
+    if (kind === 'NOTA_CREDITO' && !rejected) {
+      const freshSource = await this.prisma.invoice.findUnique({
+        where: { id: source.id },
+      });
+      if (freshSource) {
+        const applied = applyCreditToInvoice(
+          {
+            total: freshSource.total,
+            paidAmount: freshSource.paidAmount,
+            balance: freshSource.balance,
+            creditBalance: freshSource.creditBalance,
+            dueDate: freshSource.dueDate,
+            status: freshSource.status,
+          },
+          noteTotal,
+        );
+        await this.prisma.invoice.update({
           where: { id: source.id },
           data: {
-            status: InvoiceStatus.CANCELADA,
-            cancelledAt: new Date(),
+            balance: applied.balance,
+            creditBalance: applied.creditBalance,
+            status: applied.status,
           },
-        })
-        .catch(() => {});
+        });
+      }
     }
 
     await this.auditService
@@ -766,7 +819,115 @@ const updated = await this.prisma.invoice.findUnique({
     return this.emitLocal(existing, actorId);
   }
 
+  /**
+   * Consume el saldo a favor acumulado del cliente para compensar la factura que
+   * se esta por emitir. Se ejecuta justo antes de construir el payload para que
+   * la DIAN reciba como cobrado el monto real, y dentro de una transaccion para
+   * que dos facturas simultaneas no gasten el mismo credito.
+   */
+  private async compensateWithCustomerCredit(
+    invoiceId: string,
+  ): Promise<Array<{ invoiceId: string; amount: Decimal }>> {
+    const claims = await this.prisma.$transaction(async (tx) => {
+      const target = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        select: {
+          id: true,
+          customerId: true,
+          total: true,
+          paidAmount: true,
+          dueDate: true,
+          status: true,
+        },
+      });
+      if (!target) return [];
+
+      let need = target.total.sub(target.paidAmount);
+      if (need.lessThanOrEqualTo(0)) return [];
+
+      const applied: Array<{ invoiceId: string; amount: Decimal }> = [];
+      let appliedTotal = toDecimal(0);
+      let attempts = 0;
+      const MAX_ATTEMPTS = 20;
+
+      // Credito mas antiguo primero. El saldo de cada fuente se relee dentro de
+      // la transaccion y, si el `gte` no aplica porque otra transaccion se
+      // adjudico el saldo, se reintenta: al releer ya se ve el remanente y se
+      // puede consumir en lugar de desperdiciarlo. El limite de intentos evita
+      // un bucle infinito bajo contencion extrema.
+      while (need.greaterThan(0) && attempts < MAX_ATTEMPTS) {
+        attempts += 1;
+        const source = await tx.invoice.findFirst({
+          where: {
+            customerId: target.customerId,
+            id: { not: target.id, notIn: applied.map((a) => a.invoiceId) },
+            creditBalance: { gt: 0 },
+          },
+          select: { id: true, creditBalance: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (!source) break;
+
+        const wanted = source.creditBalance.lessThan(need)
+          ? source.creditBalance
+          : need;
+        const claimed = await tx.invoice.updateMany({
+          where: { id: source.id, creditBalance: { gte: wanted } },
+          data: { creditBalance: { decrement: wanted } },
+        });
+        if (claimed.count === 0) continue;
+
+        applied.push({ invoiceId: source.id, amount: wanted });
+        appliedTotal = appliedTotal.add(wanted);
+        need = need.sub(wanted);
+      }
+
+      if (appliedTotal.lessThanOrEqualTo(0)) return [];
+
+      const newPaid = target.paidAmount.add(appliedTotal);
+      const newBalance = target.total.sub(newPaid);
+      await tx.invoice.update({
+        where: { id: target.id },
+        data: {
+          paidAmount: newPaid,
+          balance: newBalance.lessThan(0) ? toDecimal(0) : newBalance,
+          status: resolveInvoiceStatus(
+            target.total,
+            newPaid,
+            target.dueDate,
+            target.status,
+          ),
+        },
+      });
+
+      return applied;
+    });
+
+    return claims;
+  }
+
+  /**
+   * Devuelve a su origen el credito que una emision fallida consumio. Sin esto,
+   * un rechazo de la DIAN quemaria el saldo a favor del cliente.
+   */
+  private async refundCustomerCredit(
+    consumed: Array<{ invoiceId: string; amount: Decimal }>,
+  ): Promise<void> {
+    if (consumed.length === 0) return;
+    await this.prisma.$transaction(async (tx) => {
+      for (const entry of consumed) {
+        await tx.invoice.update({
+          where: { id: entry.invoiceId },
+          data: { creditBalance: { increment: entry.amount } },
+        });
+      }
+    });
+  }
+
   private async emitViaFactus(existing: any, actorId: string) {
+    // Se declara fuera del try para que cualquier fallo inesperado (no solo los
+    // BadRequest previstos) pueda devolver el credio compensado.
+    let consumed: Array<{ invoiceId: string; amount: Decimal }> = [];
     try {
       const full = await this.prisma.invoice.findUnique({
         where: { id: existing.id },
@@ -778,6 +939,10 @@ const updated = await this.prisma.invoice.findUnique({
       });
       if (!full) throw new NotFoundException('Factura no encontrada.');
 
+      // Se asigna a la variable externa (no `const` local) para que todos los
+      // `refundCustomerCredit` posteriores devuelvan el credito real.
+      consumed = await this.compensateWithCustomerCredit(full.id);
+
       const resolution = await this.prisma.resolution.findFirst({
         where: {
           type: 'FACTURA',
@@ -787,6 +952,8 @@ const updated = await this.prisma.invoice.findUnique({
         orderBy: { createdAt: 'asc' },
       });
       if (!resolution) {
+        // Nada se envio a la DIAN, asi que el credio compensado debe volver.
+        await this.refundCustomerCredit(consumed);
         throw new BadRequestException(
           'No hay una resolución sincronizada con Factus para facturar. Sincroniza el rango de la resolución primero.',
         );
@@ -803,12 +970,27 @@ const updated = await this.prisma.invoice.findUnique({
             payments: true,
           },
         });
+      } else {
+        // Reintento: la compensacion pudo cambiar paidAmount/balance despues de
+        // cargar `full`. El payload debe describir el ledger actual, no el
+        // anterior a la compensacion, o la DIAN cobraria de mas.
+        const refreshed = await this.prisma.invoice.findUnique({
+          where: { id: full.id },
+          include: {
+            customer: true,
+            items: { include: { product: true } },
+            payments: true,
+          },
+        });
+        if (!refreshed) throw new NotFoundException('Factura no encontrada.');
+        invoice = refreshed;
       }
 
       const company = await this.prisma.companySettings.findUnique({
         where: { id: 'default' },
       });
       if (!company) {
+        await this.refundCustomerCredit(consumed);
         throw new BadRequestException(
           'Configuración de empresa no encontrada. Completa los datos del emisor.',
         );
@@ -824,6 +1006,7 @@ const updated = await this.prisma.invoice.findUnique({
       try {
         response = await this.factusAdapter.validateBills(payload);
       } catch (err) {
+        await this.refundCustomerCredit(consumed);
         if (err instanceof FactusApiException && err.isAlreadyExists()) {
           throw new BadRequestException(
             'La factura ya fue enviada a DIAN previamente. Verifica su estado en Factus.',
@@ -838,6 +1021,7 @@ const updated = await this.prisma.invoice.findUnique({
 
       const data = response?.data;
       if (!data?.number) {
+        await this.refundCustomerCredit(consumed);
         throw new BadRequestException(
           'Factus no devolvió el número oficial de la factura.',
         );
@@ -858,6 +1042,13 @@ const updated = await this.prisma.invoice.findUnique({
         });
 
       const dianStatus = this.factusEmission.determineDianStatus(data);
+      const rejected = dianStatus === DianStatus.RECHAZADA;
+
+      // Si la DIAN rechazo el documento no existe: se devuelve el credio
+      // compensado y la factura vuelve a BORRADOR para poder corregirla.
+      if (rejected) {
+        await this.refundCustomerCredit(consumed);
+      }
 
       const updated = await this.prisma.invoice.update({
         where: { id: existing.id },
@@ -865,7 +1056,7 @@ const updated = await this.prisma.invoice.findUnique({
           invoiceNumber: data.number,
           factusNumber: data.number,
           issueDate: new Date(),
-          status: InvoiceStatus.EMITIDA,
+          status: rejected ? InvoiceStatus.BORRADOR : InvoiceStatus.EMITIDA,
           resolutionId: resolution.id,
           resolutionNumber: resolution.resolutionNumber ?? null,
           resolutionDate: resolution.dateFrom ?? new Date(),
@@ -886,10 +1077,25 @@ const updated = await this.prisma.invoice.findUnique({
         include: { items: true, customer: true },
       });
 
-      await this.prisma.resolution.update({
-        where: { id: resolution.id },
-        data: { next: { increment: 1 } },
-      });
+      // `next` es el espejo local del rango y no debe pasar de `to`: `to` es el
+      // ultimo numero autorizado, asi que `next` se queda en `to` al agotarlo
+      // en vez de quedar en `to + 1`, que ya estaria fuera del rango.
+      if (!rejected && resolution.next < resolution.to) {
+        await this.prisma.resolution.update({
+          where: { id: resolution.id },
+          data: { next: { increment: 1 } },
+        });
+      } else if (rejected) {
+        // El numero asignado queda en la factura para traza, pero no se
+        // consume: no existe documento valido ante la DIAN.
+        this.logger?.warn?.(
+          `Factus: la factura ${data.number} fue rechazada; el numero no se consume en la resolucion ${resolution.resolutionNumber ?? resolution.id}.`,
+        );
+      } else {
+        this.logger?.warn?.(
+          `Factus: la factura ${data.number} salio del rango autorizado ${resolution.from}-${resolution.to} (${resolution.resolutionNumber ?? resolution.id}).`,
+        );
+      }
 
       await this.auditService
         .log({
@@ -909,6 +1115,7 @@ const updated = await this.prisma.invoice.findUnique({
         err instanceof BadRequestException
       )
         throw err;
+      await this.refundCustomerCredit(consumed).catch(() => {});
       if (!useInMemoryFallback()) throw err;
       return this.emitLocal(existing, actorId);
     }
@@ -1228,6 +1435,7 @@ const updated = await this.prisma.invoice.findUnique({
         null);
 
     return {
+      documentKind: invoice.documentKind ?? InvoiceKind.FACTURA,
       invoiceNumber: invoice.invoiceNumber ?? null,
       issueDate: invoice.issueDate ?? null,
       dueDate: invoice.dueDate ?? null,
@@ -1240,6 +1448,7 @@ const updated = await this.prisma.invoice.findUnique({
       balance: Number(invoice.balance ?? invoice.total ?? 0),
       notes: invoice.notes ?? null,
       cufe: invoice.cufe ?? null,
+      cude: invoice.cude ?? null,
       dianStatus: invoice.dianStatus ?? 'NO_APLICA',
       resolutionNumber: invoice.resolutionNumber ?? null,
       resolutionDate: invoice.resolutionDate ?? null,
@@ -1366,11 +1575,49 @@ const updated = await this.prisma.invoice.findUnique({
     return memInvoice;
   }
 
-  private async syncOverdueStatus<T extends any>(invoice: T): Promise<T> {
-    return invoice;
+  /**
+   * Antes esto devolvia la factura sin tocar nada, asi que una factura vencida
+   * se veia EMITIDA en /facturas y VENCIDA en /cuentas-por-cobrar: dos
+   * veridades para el mismo documento. Ahora el listado aplica la misma regla
+   * que la cartera y persiste el cambio.
+   */
+  private async syncOverdueStatus(invoice: any): Promise<any> {
+    if (!invoice?.id || !isOverdue(invoice.dueDate, invoice.balance)) {
+      return invoice;
+    }
+
+    const status = resolveInvoiceStatus(
+      invoice.total,
+      invoice.paidAmount,
+      invoice.dueDate,
+      invoice.status,
+    );
+    if (status === invoice.status) return invoice;
+
+    if (!useInMemoryFallback()) {
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status },
+      });
+    }
+    return { ...invoice, status };
   }
 
   private async computeItems(items: CreateInvoiceDto['items']) {
+    // Los codigos UN/CE de unidad y rama se copian del producto: si no, la
+    // linea siempre sale con el default "94"/"999" y las columnas del producto
+    // quedan sin efecto aunque esten informadas.
+    const productIds = items
+      .map((i) => i.productId)
+      .filter((id): id is string => Boolean(id));
+    const products = productIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, unitMeasureCode: true, standardCode: true },
+        })
+      : [];
+    const byProduct = new Map(products.map((p) => [p.id, p]));
+
     return Promise.all(
       items.map(async (item) => {
         const { subtotal, taxAmount, total } = calculateLineTotal(
@@ -1379,6 +1626,9 @@ const updated = await this.prisma.invoice.findUnique({
           item.discount ?? 0,
           item.taxRate ?? 0,
         );
+        const product = item.productId
+          ? byProduct.get(item.productId)
+          : undefined;
 
         return {
           productId: item.productId,
@@ -1390,6 +1640,11 @@ const updated = await this.prisma.invoice.findUnique({
           subtotal,
           taxAmount,
           total,
+          // 94 = UNIDAD y 999 = rama no especificada: son los defaults DIAN y
+          // se fijan aqui para no depender del default de la columna.
+          unitMeasureCode:
+            item.unitMeasureCode ?? product?.unitMeasureCode ?? '94',
+          standardCode: item.standardCode ?? product?.standardCode ?? '999',
         };
       }),
     );

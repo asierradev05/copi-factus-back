@@ -9,7 +9,7 @@ describe('FactusEmissionService.determineDianStatus', () => {
       errors: [],
       number: 'FAC-1',
       cufe: 'X',
-    } as FactusBillData;
+    } as unknown as FactusBillData;
     expect(
       new FactusEmissionService(null as any, null as any).determineDianStatus(
         data,
@@ -17,13 +17,46 @@ describe('FactusEmissionService.determineDianStatus', () => {
     ).toBe(DianStatus.VALIDADA);
   });
 
-  it('ENVIADA cuando hay errors de DIAN no bloqueantes', () => {
+  it('VALIDADA cuando solo llegan notificaciones informativas de la DIAN', () => {
     const data = {
       is_validated: true,
-      errors: [{ message: 'notificación DIAN' }],
+      errors: [
+        'Regla: RUT01, Notificación: La validación del estado del RUT próximamente estará disponible.',
+      ],
       number: 'FAC-1',
       cufe: 'X',
-    } as FactusBillData;
+    } as unknown as FactusBillData;
+    expect(
+      new FactusEmissionService(null as any, null as any).determineDianStatus(
+        data,
+      ),
+    ).toBe(DianStatus.VALIDADA);
+  });
+
+  it('ENVIADA cuando hay un error real de la DIAN', () => {
+    const data = {
+      is_validated: true,
+      errors: ['Regla: 0301, Error: documento duplicado'],
+      number: 'FAC-1',
+      cufe: 'X',
+    } as unknown as FactusBillData;
+    expect(
+      new FactusEmissionService(null as any, null as any).determineDianStatus(
+        data,
+      ),
+    ).toBe(DianStatus.ENVIADA);
+  });
+
+  it('ENVIADA cuando un error real convive con notificaciones', () => {
+    const data = {
+      is_validated: true,
+      errors: [
+        { message: 'Notificación DIAN' },
+        'Regla: 0301, Error: documento duplicado',
+      ],
+      number: 'FAC-1',
+      cufe: 'X',
+    } as unknown as FactusBillData;
     expect(
       new FactusEmissionService(null as any, null as any).determineDianStatus(
         data,
@@ -37,7 +70,7 @@ describe('FactusEmissionService.determineDianStatus', () => {
       errors: [],
       number: 'FAC-1',
       cufe: 'X',
-    } as FactusBillData;
+    } as unknown as FactusBillData;
     expect(
       new FactusEmissionService(null as any, null as any).determineDianStatus(
         data,

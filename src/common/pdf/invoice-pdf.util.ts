@@ -38,7 +38,21 @@ export interface InvoicePdfLineItem {
   total: number;
 }
 
+/**
+ * Rotulo del documento. Una nota reimpresa como "FACTURA" es un documento
+ * fiscal mal identificado, asi que el titulo sigue al tipo real y solo cae a
+ * FACTURA cuando el tipo no viene informado.
+ */
+export function documentLabel(
+  documentKind?: string | null,
+): 'FACTURA' | 'NOTA CREDITO' | 'NOTA DEBITO' {
+  if (documentKind === 'NOTA_CREDITO') return 'NOTA CREDITO';
+  if (documentKind === 'NOTA_DEBITO') return 'NOTA DEBITO';
+  return 'FACTURA';
+}
+
 export interface InvoicePdfModel {
+  documentKind?: string | null;
   invoiceNumber?: string | null;
   issueDate?: Date | string | null;
   dueDate?: Date | string | null;
@@ -51,6 +65,8 @@ export interface InvoicePdfModel {
   balance: number;
   notes?: string | null;
   cufe?: string | null;
+  /** Identificador propio de las notas (CUDE). Las facturas no lo usan. */
+  cude?: string | null;
   dianStatus: string;
   resolutionNumber?: string | null;
   resolutionDate?: Date | string | null;
@@ -180,6 +196,8 @@ function headerRightStack(invoice: InvoicePdfModel): Content[] {
     alignment: 'left' | 'right' | 'center' = 'left',
   ) => ({ text, alignment, fontSize: 9 });
 
+  const docLabel = documentLabel(invoice.documentKind);
+
   return [
     {
       table: {
@@ -187,7 +205,7 @@ function headerRightStack(invoice: InvoicePdfModel): Content[] {
         body: [
           [
             {
-              text: 'FACTURA',
+              text: docLabel,
               colSpan: 2,
               bold: true,
               fontSize: 16,
@@ -198,7 +216,7 @@ function headerRightStack(invoice: InvoicePdfModel): Content[] {
             {},
           ],
           [
-            { text: 'No. FACTURA', bold: true, fontSize: 8 },
+            { text: `No. ${docLabel}`, bold: true, fontSize: 8 },
             {
               text: invoice.invoiceNumber,
               alignment: 'right',
@@ -432,7 +450,7 @@ export function buildDocDefinition(
       columnGap: 10,
       margin: [0, 0, 0, 10],
     },
-    sectionHeader('DETALLE DE LA FACTURA'),
+    sectionHeader(`DETALLE DE LA ${documentLabel(invoice.documentKind)}`),
     {
       table: {
         headerRows: 1,
@@ -488,10 +506,17 @@ export function buildDocDefinition(
     invoice.factusNumber ||
     invoice.resolutionNumber ||
     invoice.paymentForm ||
+    invoice.cufe ||
+    invoice.cude ||
     (invoice.paymentMethods?.length ?? 0) > 0 ||
     invoice.cashRoundingAmount
   ) {
-    if (invoice.factusNumber || invoice.resolutionNumber) {
+    if (
+      invoice.factusNumber ||
+      invoice.resolutionNumber ||
+      invoice.cufe ||
+      invoice.cude
+    ) {
       const labelCell = (text: string): Content => ({
         text,
         bold: true,
@@ -520,7 +545,7 @@ export function buildDocDefinition(
       const dianRows: Content[][] = [
         [
           {
-            text: 'INFORMACIÓN DIAN · FACTURA ELECTRÓNICA',
+            text: `INFORMACIÓN DIAN · ${documentLabel(invoice.documentKind)} ELECTRÓNICA`,
             colSpan: 2,
             bold: true,
             fontSize: 9.5,
@@ -562,11 +587,12 @@ export function buildDocDefinition(
           }),
         ]);
       }
-      if (invoice.cufe) {
+      const dianIdentifier = invoice.cufe ?? invoice.cude;
+      if (dianIdentifier) {
         dianRows.push([
-          labelCell('CUFE'),
+          labelCell(invoice.cufe ? 'CUFE' : 'CUDE'),
           {
-            text: chunkCufe(invoice.cufe),
+            text: chunkCufe(dianIdentifier),
             fontSize: 7.5,
             color: '#333333',
             margin: [2, 4, 6, 4],

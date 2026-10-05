@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { globalStore } from '../database/in-memory-store';
 import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { toDecimal } from '../common/utils/money.util';
+import { isPayableDocument } from '../common/utils/invoice-credit.util';
 import { resolveInvoiceStatus } from '../common/utils/invoice-status.util';
 import { CreatePaymentDto, FilterPaymentDto } from './dto/payment.dto';
 
@@ -93,11 +94,31 @@ export class PaymentsService {
           );
         }
 
-        const totalPaid = invoice.payments.reduce(
+        if (!isPayableDocument(invoice.documentKind)) {
+          throw new BadRequestException(
+            'Una nota crédito no admite pagos: su efecto ya se aplicó al saldo de la factura de origen.',
+          );
+        }
+
+        // Lo ya pagado se lee del ledger (`paidAmount`), no de la suma de
+        // `payments`: la compensacion de credito a favor descuenta el saldo
+        // escribiendo `paidAmount` sin crear filas de pago. Sumar solo `payments`
+        // veria cero y admitiria un segundo pago del mismo monto, ademas de
+        // sobrescribir el `paidAmount` ya compensado.
+        const paymentsTotal = invoice.payments.reduce(
           (acc, p) => acc.add(p.amount),
           toDecimal(0),
         );
-        const balance = invoice.total.sub(totalPaid);
+        const ledgerTotal = toDecimal(invoice.paidAmount ?? 0);
+        // Se toma el mayor de los dos para que ningun desajuste historico
+        // permita cobrar de mas.
+        const totalPaid = ledgerTotal.greaterThan(paymentsTotal)
+          ? ledgerTotal
+          : paymentsTotal;
+
+        const balance = invoice.total
+          .sub(totalPaid)
+          .sub(toDecimal(invoice.creditBalance ?? 0));
 
         if (toDecimal(amountVal).greaterThan(balance)) {
           throw new BadRequestException(
@@ -119,9 +140,11 @@ export class PaymentsService {
         });
 
         const newPaidAmount = totalPaid.add(toDecimal(amountVal));
-        const newBalance = invoice.total.sub(newPaidAmount);
+        const newBalance = invoice.total
+          .sub(newPaidAmount)
+          .sub(toDecimal(invoice.creditBalance ?? 0));
         const newStatus = resolveInvoiceStatus(
-          invoice.total,
+          invoice.total.sub(toDecimal(invoice.creditBalance ?? 0)),
           newPaidAmount,
           invoice.dueDate,
           invoice.status,

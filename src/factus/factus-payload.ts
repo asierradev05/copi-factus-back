@@ -54,7 +54,13 @@ function buildItemsPayload(
   withTaxAmount = true,
 ) {
   return items.map((item) => {
-    const taxAmount = round2(item.quantity * item.price * (item.taxRate / 100));
+    // La base imponible es el neto: el interno guarda subtotal = cantidad*precio
+    // - descuento (ver calculateLineSubtotal). Calcular el IVA sobre el bruto
+    // hacía que el documento dijera un impuesto que no correspondía al total
+    // almacenado, justo en las líneas con descuento.
+    const gross = item.quantity * item.price;
+    const net = gross - (item.discount ?? 0);
+    const taxAmount = round2(Math.max(net, 0) * (item.taxRate / 100));
     return {
       code_reference: item.code,
       name: item.name,
@@ -75,6 +81,21 @@ function buildItemsPayload(
         : {}),
     };
   });
+}
+
+/**
+ * El payload de notas (V2) exige `discount_rate` como tasa porcentual sobre el
+ * valor bruto del ítem, mientras el modelo interno guarda `discount` como monto
+ * absoluto (subtotal = cantidad * precio - descuento). Sin esta conversión se
+ * enviaría el monto absoluto donde la DIAN espera el porcentaje.
+ */
+function discountRateFor(item: FactusNoteBuildInput['items'][number]): string {
+  const gross = item.quantity * item.price;
+  if (!(gross > 0)) {
+    return '0.00';
+  }
+  const rate = ((item.discount ?? 0) / gross) * 100;
+  return round2(Math.min(Math.max(rate, 0), 100)).toFixed(2);
 }
 
 function buildPaymentDetails(
@@ -146,7 +167,7 @@ export function buildNotePayload(
         name: item.name,
         ...(item.description ? { description: item.description } : {}),
         quantity: item.quantity,
-        discount_rate: (item.discount ?? 0).toFixed(2),
+        discount_rate: discountRateFor(item),
         price: item.price,
         unit_measure_code: item.unitMeasureCode ?? '94',
         standard_code: item.standardCode ?? '999',

@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { InvoiceStatus, Prisma } from '@prisma/client';
+import { AuditAction, InvoiceStatus, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/client';
 import { globalStore } from '../database/in-memory-store';
 import { useInMemoryFallback } from '../common/utils/fallback.util';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import {
+  buildReceivableWhere,
+  buildReceivableSummaryWhere,
+} from './accounts-receivable.filter';
 import {
   isOverdue,
   resolveInvoiceStatus,
@@ -12,19 +17,14 @@ import { FilterReceivableDto } from './dto/filter-receivable.dto';
 
 @Injectable()
 export class AccountsReceivableService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async getSummary() {
     const invoices = await this.prisma.invoice.findMany({
-      where: {
-        status: {
-          in: [
-            InvoiceStatus.EMITIDA,
-            InvoiceStatus.PARCIALMENTE_PAGADA,
-            InvoiceStatus.VENCIDA,
-          ],
-        },
-      },
+      where: buildReceivableSummaryWhere(),
     });
 
     let totalReceivable = new Decimal(0);
@@ -71,16 +71,7 @@ export class AccountsReceivableService {
     const limit = filters.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.InvoiceWhereInput = {
-      status: {
-        in: [
-          InvoiceStatus.EMITIDA,
-          InvoiceStatus.PARCIALMENTE_PAGADA,
-          InvoiceStatus.VENCIDA,
-        ],
-      },
-      balance: { gt: 0 },
-    };
+    const where: Prisma.InvoiceWhereInput = buildReceivableWhere();
 
     const [rawData, total] = await Promise.all([
       this.prisma.invoice.findMany({
@@ -109,6 +100,16 @@ export class AccountsReceivableService {
             await this.prisma.invoice.update({
               where: { id: invoice.id },
               data: { status },
+            });
+            // Marcar vencida muta estado financiero desde una lectura. Sin
+            // registro de auditoria no habria forma de reconstruir cuando se
+            // produjo el cambio ni desde que estado.
+            await this.auditService.log({
+              action: AuditAction.UPDATE,
+              entityType: 'Invoice',
+              entityId: invoice.id,
+              oldValue: { status: invoice.status },
+              newValue: { status },
             });
           }
         }

@@ -147,8 +147,28 @@ describe('buildNotePayload', () => {
     ]);
   });
 
-  it('incluye discount_rate cuando el ítem tiene descuento', () => {
-    const input = makeNoteInput();
+  it('el tax_amount se calcula sobre el subtotal neto, igual que en la base de datos', () => {
+    const input = makeInput();
+    input.items = [
+      {
+        code: 'P001',
+        name: 'Prod',
+        quantity: 10,
+        price: 2000,
+        taxRate: 19,
+        discount: 500,
+      },
+    ];
+    const payload = buildBillPayload(input) as any;
+    // Base interna (money.util): (10*2000 - 500) * 19% = 3705
+    // Si el payload calculara sobre el bruto enviaría 3800 y el documento
+    // no cuadraría con el total almacenado.
+    expect(payload.items[0].taxes[0].tax_amount).toBe('3705.00');
+    expect(payload.items[0].discount).toEqual({ type: '02', value: 500 });
+  });
+
+  it('el tax_amount nunca queda por debajo de cero si el descuento excede el bruto', () => {
+    const input = makeInput();
     input.items = [
       {
         code: 'P001',
@@ -156,10 +176,27 @@ describe('buildNotePayload', () => {
         quantity: 1,
         price: 100,
         taxRate: 19,
-        discount: 10,
+        discount: 500,
+      },
+    ];
+    const payload = buildBillPayload(input) as any;
+    expect(payload.items[0].taxes[0].tax_amount).toBe('0.00');
+  });
+
+  it('convierte el descuento absoluto del ítem a tasa porcentual', () => {
+    const input = makeNoteInput();
+    input.items = [
+      {
+        code: 'P001',
+        name: 'Prod',
+        quantity: 10,
+        price: 100,
+        taxRate: 19,
+        discount: 100,
       },
     ];
     const payload = buildNotePayload(input) as any;
+    // gross = 10 * 100 = 1000; tasa = 100 / 1000 * 100 = 10.00
     expect(payload.items[0].discount_rate).toBe('10.00');
   });
 });

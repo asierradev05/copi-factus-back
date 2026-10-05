@@ -1,7 +1,8 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -11,6 +12,14 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  UNCE_STANDARD_CODES,
+  UNCE_UNIT_MEASURE_CODES,
+} from '../../common/utils/unce-codes';
+
+/** La DIAN solo admite mayusculas; "kgm" es un error de tipeo razonable. */
+const canonicalUnceCode = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toUpperCase() : value;
 
 export class CreateInvoiceItemDto {
   @IsOptional()
@@ -42,6 +51,28 @@ export class CreateInvoiceItemDto {
   @IsNumber()
   @Min(0)
   taxRate?: number;
+
+  /**
+   * Codigo de unidad UN/CE (tabla 3). No es solo numerico: `94` unidad, `75`
+   * hora, `MTK` m2, `MTR` metro, `KGM` kilogramo, `OTR` otro.
+   */
+  @IsOptional()
+  @Transform(canonicalUnceCode)
+  @IsIn(UNCE_UNIT_MEASURE_CODES, {
+    message: `Codigo de unidad UN/CE invalido. Permitidos: ${UNCE_UNIT_MEASURE_CODES.join(', ')}.`,
+  })
+  unitMeasureCode?: string;
+
+  /**
+   * Estandar de identificacion del item (tabla item_code): `999` no
+   * estandarizado, `001` GTIN, `020` EAN, `010` UNSPC.
+   */
+  @IsOptional()
+  @Transform(canonicalUnceCode)
+  @IsIn(UNCE_STANDARD_CODES, {
+    message: `Codigo de estandar invalido. Permitidos: ${UNCE_STANDARD_CODES.join(', ')}.`,
+  })
+  standardCode?: string;
 }
 
 export class CreateInvoiceDto {

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { DianStatus } from '@prisma/client';
+import { DianStatus, DocumentType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { buildNotePayload, buildBillPayload } from './factus-payload';
+import { hasBlockingDianErrors } from './dian-response.util';
 import {
   calculateDianDv,
   generateReferenceCode,
@@ -18,6 +19,111 @@ import type {
 
 const BUCKET = 'invoice-pdfs';
 
+/**
+ * Bloques compartidos entre factura y nota. Facturas y notas van al mismo
+ * endpoint con la misma estructura de tercero e items, asi que duplicar el
+ * mapeo solo servia para que un campo se actualizara en un camino y no en el
+ * otro: los codigos UN/CE hubo que anadirlos en los dos por separado.
+ */
+type DianParty = {
+  documentType?: DocumentType | string | null;
+  documentNumber?: string | null;
+  dv?: string | null;
+  name?: string | null;
+  legalOrganizationCode?: number | null;
+  tributeCode?: string | null;
+  responsibilities?: unknown;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  municipalityCode?: string | null;
+  countryCode?: string | null;
+};
+
+function mapCustomer(customer: DianParty | null | undefined) {
+  const legalOrg = customer?.legalOrganizationCode ?? 2;
+  // El DV solo se calcula para NIT: en CC la DIAN espera 0.
+  const dv =
+    customer?.documentType === 'NIT'
+      ? (customer?.dv ?? calculateDianDv(customer?.documentNumber ?? ''))
+      : (customer?.dv ?? '0');
+
+  const responsibilities: Array<{ code: string }> =
+    Array.isArray(customer?.responsibilities) &&
+    (customer?.responsibilities as Array<{ code: string }>).length > 0
+      ? (customer?.responsibilities as Array<{ code: string }>)
+      : legalOrg === 2
+        ? [{ code: 'R-99-PN' }]
+        : [{ code: 'O-13' }];
+
+  return {
+    documentTypeDian: mapDocumentTypeToDian(
+      (customer?.documentType ?? 'CC') as DocumentType,
+    ),
+    dv,
+    identificationNumber: String(customer?.documentNumber ?? '').replace(
+      /[^0-9]/g,
+      '',
+    ),
+    name: customer?.name ?? 'Cliente',
+    legalOrganizationCode: legalOrg,
+    tributeCode: customer?.tributeCode ?? (legalOrg === 2 ? 'ZZ' : '01'),
+    responsibilities,
+    email: customer?.email ?? undefined,
+    phone: customer?.phone ?? undefined,
+    address: customer?.address ?? undefined,
+    municipalityCode: customer?.municipalityCode ?? '11001',
+    countryCode: customer?.countryCode ?? 'CO',
+  };
+}
+
+function mapCompany(company: {
+  legalOrganizationCode?: number | null;
+  name: string;
+  legalName: string;
+  tradeName?: string | null;
+  email?: string | null;
+  address?: string | null;
+  registrationCode?: string | null;
+  phone?: string | null;
+  municipalityCode?: string | null;
+  economicActivity?: string | null;
+  tributeCode?: string | null;
+  responsibilities?: unknown;
+}) {
+  return {
+    legalOrganizationCode: company.legalOrganizationCode ?? 1,
+    name: company.name,
+    legalName: company.legalName,
+    tradeName: company.tradeName ?? undefined,
+    email: company.email ?? undefined,
+    address: company.address ?? undefined,
+    registrationCode: company.registrationCode ?? undefined,
+    phone: company.phone ?? undefined,
+    municipalityCode: company.municipalityCode ?? '11001',
+    economicActivity: company.economicActivity ?? undefined,
+    tributeCode: company.tributeCode ?? '01',
+    responsibilities:
+      Array.isArray(company.responsibilities) &&
+      (company.responsibilities as Array<{ code: string }>).length > 0
+        ? (company.responsibilities as Array<{ code: string }>)
+        : [{ code: 'O-13' }],
+  };
+}
+
+function mapItems(items: unknown) {
+  return ((items ?? []) as Array<any>).map((it, index) => ({
+    code: it.product?.code ?? `IT${index + 1}`,
+    name: String(it.description ?? '').slice(0, 50),
+    quantity: Number(it.quantity ?? 0),
+    price: Number(it.unitPrice ?? 0),
+    taxRate: Number(it.taxRate ?? 0),
+    ...(Number(it.discount ?? 0) > 0 ? { discount: Number(it.discount) } : {}),
+    unitMeasureCode: it.unitMeasureCode ?? '94',
+    standardCode: it.standardCode ?? '999',
+  }));
+}
+
 @Injectable()
 export class FactusEmissionService {
   constructor(
@@ -27,8 +133,9 @@ export class FactusEmissionService {
 
   determineDianStatus(data: FactusBillData): DianStatus {
     if (!data.is_validated) return DianStatus.RECHAZADA;
-    const hasErrors = Array.isArray(data.errors) && data.errors.length > 0;
-    return hasErrors ? DianStatus.ENVIADA : DianStatus.VALIDADA;
+    return hasBlockingDianErrors(data)
+      ? DianStatus.ENVIADA
+      : DianStatus.VALIDADA;
   }
 
   buildPayload(
@@ -60,20 +167,6 @@ export class FactusEmissionService {
     },
   ): Record<string, unknown> {
     const customer = invoice.customer;
-    const countryCode = customer?.countryCode ?? 'CO';
-    const legalOrg = customer?.legalOrganizationCode ?? 2;
-    const dv =
-      customer?.documentType === 'NIT'
-        ? (customer?.dv ?? calculateDianDv(customer?.documentNumber ?? ''))
-        : (customer?.dv ?? '0');
-
-    const responsibilities: Array<{ code: string }> =
-      customer?.responsibilities?.length > 0
-        ? customer.responsibilities
-        : legalOrg === 2
-          ? [{ code: 'R-99-PN' }]
-          : [{ code: 'O-13' }];
-
     const fullyPaid =
       Number(invoice.paidAmount) > 0 &&
       Number(invoice.total) - Number(invoice.paidAmount) <= 0;
@@ -82,53 +175,9 @@ export class FactusEmissionService {
     const input: FactusBuildInput = {
       referenceCode: invoice.referenceCode ?? generateReferenceCode(invoice.id),
       numberingRangeId: resolution.numberingRangeId ?? 0,
-      customer: {
-        documentTypeDian: mapDocumentTypeToDian(customer?.documentType ?? 'CC'),
-        dv,
-        identificationNumber: String(customer?.documentNumber ?? '').replace(
-          /[^0-9]/g,
-          '',
-        ),
-        name: customer?.name ?? 'Cliente',
-        legalOrganizationCode: legalOrg,
-        tributeCode: customer?.tributeCode ?? (legalOrg === 2 ? 'ZZ' : '01'),
-        responsibilities,
-        email: customer?.email ?? undefined,
-        phone: customer?.phone ?? undefined,
-        address: customer?.address ?? undefined,
-        municipalityCode: customer?.municipalityCode ?? '11001',
-        countryCode,
-      },
-      company: {
-        legalOrganizationCode: company.legalOrganizationCode ?? 1,
-        name: company.name,
-        legalName: company.legalName,
-        tradeName: company.tradeName ?? undefined,
-        email: company.email ?? undefined,
-        address: company.address ?? undefined,
-        registrationCode: company.registrationCode ?? undefined,
-        phone: company.phone ?? undefined,
-        municipalityCode: company.municipalityCode ?? '11001',
-        economicActivity: company.economicActivity ?? undefined,
-        tributeCode: company.tributeCode ?? '01',
-        responsibilities:
-          Array.isArray(company.responsibilities) &&
-          (company.responsibilities as Array<{ code: string }>).length > 0
-            ? (company.responsibilities as Array<{ code: string }>)
-            : [{ code: 'O-13' }],
-      },
-      items: (invoice.items ?? []).map((it: any, index: number) => ({
-        code: it.product?.code ?? `IT${index + 1}`,
-        name: String(it.description ?? '').slice(0, 50),
-        quantity: Number(it.quantity ?? 0),
-        price: Number(it.unitPrice ?? 0),
-        taxRate: Number(it.taxRate ?? 0),
-        ...(Number(it.discount ?? 0) > 0
-          ? { discount: Number(it.discount) }
-          : {}),
-        unitMeasureCode: it.unitMeasureCode ?? '94',
-        standardCode: it.standardCode ?? '999',
-      })),
+      customer: mapCustomer(customer),
+      company: mapCompany(company),
+      items: mapItems(invoice.items),
       total: Number(invoice.total ?? 0),
       paidAmount: Number(invoice.paidAmount ?? 0),
       dueDate: invoice.dueDate ?? undefined,
@@ -201,21 +250,6 @@ export class FactusEmissionService {
     },
     kind: FactusNoteKind,
   ): Record<string, unknown> {
-    const customer = note.customer;
-    const countryCode = customer?.countryCode ?? 'CO';
-    const legalOrg = customer?.legalOrganizationCode ?? 2;
-    const dv =
-      customer?.documentType === 'NIT'
-        ? (customer?.dv ?? calculateDianDv(customer?.documentNumber ?? ''))
-        : (customer?.dv ?? '0');
-
-    const responsibilities: Array<{ code: string }> =
-      customer?.responsibilities?.length > 0
-        ? customer.responsibilities
-        : legalOrg === 2
-          ? [{ code: 'R-99-PN' }]
-          : [{ code: 'O-13' }];
-
     const lastPayment = note.payments?.[note.payments.length - 1];
     const amount = Number(note.total ?? 0);
 
@@ -227,53 +261,9 @@ export class FactusEmissionService {
       customizationId:
         note.operationType ?? (kind === 'NOTA_CREDITO' ? '20' : '30'),
       observation: note.notes ?? undefined,
-      customer: {
-        documentTypeDian: mapDocumentTypeToDian(customer?.documentType ?? 'CC'),
-        dv,
-        identificationNumber: String(customer?.documentNumber ?? '').replace(
-          /[^0-9]/g,
-          '',
-        ),
-        name: customer?.name ?? 'Cliente',
-        legalOrganizationCode: legalOrg,
-        tributeCode: customer?.tributeCode ?? (legalOrg === 2 ? 'ZZ' : '01'),
-        responsibilities,
-        email: customer?.email ?? undefined,
-        phone: customer?.phone ?? undefined,
-        address: customer?.address ?? undefined,
-        municipalityCode: customer?.municipalityCode ?? '11001',
-        countryCode,
-      },
-      company: {
-        legalOrganizationCode: company.legalOrganizationCode ?? 1,
-        name: company.name,
-        legalName: company.legalName,
-        tradeName: company.tradeName ?? undefined,
-        email: company.email ?? undefined,
-        address: company.address ?? undefined,
-        registrationCode: company.registrationCode ?? undefined,
-        phone: company.phone ?? undefined,
-        municipalityCode: company.municipalityCode ?? '11001',
-        economicActivity: company.economicActivity ?? undefined,
-        tributeCode: company.tributeCode ?? '01',
-        responsibilities:
-          Array.isArray(company.responsibilities) &&
-          (company.responsibilities as Array<{ code: string }>).length > 0
-            ? (company.responsibilities as Array<{ code: string }>)
-            : [{ code: 'O-13' }],
-      },
-      items: (note.items ?? []).map((it: any, index: number) => ({
-        code: it.product?.code ?? `IT${index + 1}`,
-        name: String(it.description ?? '').slice(0, 50),
-        quantity: Number(it.quantity ?? 0),
-        price: Number(it.unitPrice ?? 0),
-        taxRate: Number(it.taxRate ?? 0),
-        ...(Number(it.discount ?? 0) > 0
-          ? { discount: Number(it.discount) }
-          : {}),
-        unitMeasureCode: it.unitMeasureCode ?? '94',
-        standardCode: it.standardCode ?? '999',
-      })),
+      customer: mapCustomer(note.customer),
+      company: mapCompany(company),
+      items: mapItems(note.items),
       amount,
       dueDate: note.dueDate ?? undefined,
       paymentMethodDian: mapPaymentMethodToDian(

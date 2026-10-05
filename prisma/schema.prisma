@@ -244,6 +244,7 @@ model Invoice {
   total         Decimal       @default(0) @db.Decimal(12, 2)
   paidAmount    Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
   balance       Decimal       @default(0) @db.Decimal(12, 2)
+  creditBalance Decimal       @default(0) @map("credit_balance") @db.Decimal(12, 2)
   status        InvoiceStatus @default(BORRADOR)
   documentKind  InvoiceKind   @default(FACTURA) @map("document_kind")
   redSourceId   String?       @map("red_source_id")
@@ -253,6 +254,8 @@ model Invoice {
   notes         String?
   cancelledAt   DateTime?     @map("cancelled_at")
   cufe          String?       @map("cufe")
+  /// Identificador propio de las notas crédito/débito. Las facturas no lo usan.
+  cude          String?       @map("cude")
   resolutionNumber  String?   @map("resolution_number")
   resolutionDate    DateTime? @map("resolution_date")
   dianStatus    DianStatus    @default(NO_APLICA) @map("dian_status")
