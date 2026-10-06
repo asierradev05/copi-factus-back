@@ -24,9 +24,10 @@ export async function createNestApp() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? [
+    origin: process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ?? [
       'http://localhost:5173',
       'http://localhost:3000',
+      'https://panel.copigraficassierra.com',
       'https://www.copigraficassierra.com',
       'https://copigraficassierra.com',
     ],
