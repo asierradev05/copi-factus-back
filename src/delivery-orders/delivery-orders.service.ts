@@ -162,6 +162,7 @@ export class DeliveryOrdersService {
       description: item.description.trim(),
       quantity: Number(item.quantity.toFixed(2)),
       unitPrice: item.unitPrice ? Number(item.unitPrice.toFixed(2)) : 0,
+      taxRate: item.taxRate ? Number(item.taxRate.toFixed(2)) : 0,
     }));
 
     const doNumber = await this.prisma.$transaction((tx) =>

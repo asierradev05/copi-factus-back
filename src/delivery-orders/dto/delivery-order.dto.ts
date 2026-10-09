@@ -29,6 +29,13 @@ export class CreateDeliveryOrderItemDto {
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  taxRate?: number;
 }
 
 export class CreateDeliveryOrderDto {

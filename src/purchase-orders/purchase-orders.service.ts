@@ -207,6 +207,7 @@ export class PurchaseOrdersService {
       description: string;
       quantity: number;
       unitPrice?: number;
+      taxRate?: number;
     }>;
 
     const doNumber = await this.prisma.$transaction((tx) =>
@@ -224,6 +225,7 @@ export class PurchaseOrdersService {
           description: item.description.trim(),
           quantity: Number(item.quantity.toFixed(2)),
           unitPrice: item.unitPrice ? Number(item.unitPrice.toFixed(2)) : 0,
+          taxRate: item.taxRate ? Number(item.taxRate.toFixed(2)) : 0,
         })),
         notes: po.notes,
         status: DeliveryOrderStatus.PENDIENTE,

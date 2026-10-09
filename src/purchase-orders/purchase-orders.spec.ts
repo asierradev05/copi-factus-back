@@ -165,6 +165,39 @@ describe('PurchaseOrdersService (conversión a orden de entrega)', () => {
       expect(items[1].quantity).toBe(5.46);
     });
 
+    it('conserva el IVA (taxRate) de cada ítem al copiarlos', async () => {
+      const poId = await createPo(PurchaseOrderStatus.APROBADA, [
+        {
+          description: 'Láminas',
+          quantity: 2,
+          unitPrice: 1000,
+          discount: 0,
+          taxRate: 19,
+        },
+        {
+          description: 'Afiches',
+          quantity: 1,
+          unitPrice: 1500,
+          discount: 0,
+          taxRate: 0,
+        },
+      ]);
+
+      const doo = await service.convertToDeliveryOrder(poId, actorId);
+      dooIds.push(doo.id);
+
+      const items = doo.items as Array<{
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        taxRate?: number;
+      }>;
+      // El IVA debe viajar con el ítem: si se pierde aquí, la factura se genera
+      // sin IVA y no cuadra con la cotización.
+      expect(items[0].taxRate).toBe(19);
+      expect(items[1].taxRate).toBe(0);
+    });
+
     it('cada conversión reserva un número de orden de entrega distinto', async () => {
       const first = await service.convertToDeliveryOrder(
         await createPo(PurchaseOrderStatus.APROBADA, itemsWithPadding),
