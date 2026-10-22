@@ -99,6 +99,24 @@ export class ServicesService {
       const where: Prisma.ServiceWhereInput = {};
       if (filters.customerId) where.customerId = filters.customerId;
       if (filters.status) where.status = filters.status;
+      if (filters.search) {
+        where.OR = [
+          { description: { contains: filters.search, mode: 'insensitive' } },
+          {
+            customer: {
+              name: { contains: filters.search, mode: 'insensitive' },
+            },
+          },
+          {
+            customer: {
+              documentNumber: {
+                contains: filters.search,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ];
+      }
 
       const [data, total] = await Promise.all([
         this.prisma.service.findMany({
@@ -127,6 +145,19 @@ export class ServicesService {
       }
       if (filters.status) {
         filtered = filtered.filter((s) => s.status === filters.status);
+      }
+      if (filters.search) {
+        const term = filters.search.toLowerCase();
+        filtered = filtered.filter((s) => {
+          const customer = globalStore.customers.find(
+            (c) => c.id === s.customerId,
+          );
+          return (
+            (s.description ?? '').toLowerCase().includes(term) ||
+            (customer?.name ?? '').toLowerCase().includes(term) ||
+            (customer?.documentNumber ?? '').toLowerCase().includes(term)
+          );
+        });
       }
       const data = filtered.slice(skip, skip + limit);
       const total = filtered.length;

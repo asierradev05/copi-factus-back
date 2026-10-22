@@ -46,6 +46,24 @@ export class QuotesService {
     const where: Prisma.QuoteWhereInput = {};
     if (query.customerId) where.customerId = query.customerId;
     if (query.status) where.status = query.status;
+    if (query.search) {
+      where.OR = [
+        { quoteNumber: { contains: query.search, mode: 'insensitive' } },
+        {
+          customer: {
+            name: { contains: query.search, mode: 'insensitive' },
+          },
+        },
+        {
+          customer: {
+            documentNumber: {
+              contains: query.search,
+              mode: 'insensitive',
+            },
+          },
+        },
+      ];
+    }
     if (query.from || query.to) {
       where.issueDate = {
         ...(query.from ? { gte: new Date(query.from) } : {}),
@@ -64,9 +82,30 @@ export class QuotesService {
       this.prisma.quote.count({ where }),
     ]);
 
+    const filteredData = query.search
+      ? data.filter((quote) => {
+          const term = query.search!.toLowerCase();
+          if (quote.quoteNumber?.toLowerCase().includes(term)) return true;
+          if (quote.customer?.name?.toLowerCase().includes(term)) return true;
+          if (quote.customer?.documentNumber?.toLowerCase().includes(term))
+            return true;
+          const items = (quote.items as any[]) ?? [];
+          return items.some((item) =>
+            (item.description ?? '').toLowerCase().includes(term),
+          );
+        })
+      : data;
+
     return {
-      data,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      data: filteredData,
+      meta: {
+        total: query.search ? filteredData.length : total,
+        page,
+        limit,
+        totalPages: Math.ceil(
+          (query.search ? filteredData.length : total) / limit,
+        ),
+      },
     };
   }
 

@@ -114,6 +114,16 @@ export class InvoicesService {
               },
             },
           },
+          {
+            items: {
+              some: {
+                description: {
+                  contains: filters.search,
+                  mode: 'insensitive',
+                },
+              },
+            },
+          },
         ];
       }
       if (filters.from || filters.to) {
@@ -158,10 +168,14 @@ export class InvoicesService {
           const customer = globalStore.customers.find(
             (c) => c.id === i.customerId,
           );
+          const itemMatch = (i.items ?? []).some((item: any) =>
+            (item.description ?? '').toLowerCase().includes(term),
+          );
           return (
             (i.invoiceNumber ?? '').toLowerCase().includes(term) ||
             (customer?.name ?? '').toLowerCase().includes(term) ||
-            (customer?.documentNumber ?? '').toLowerCase().includes(term)
+            (customer?.documentNumber ?? '').toLowerCase().includes(term) ||
+            itemMatch
           );
         });
       }

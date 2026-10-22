@@ -132,6 +132,10 @@ export class FilterServiceDto {
   status?: ServiceStatus;
 
   @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
@@ -141,6 +145,6 @@ export class FilterServiceDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
-  @Max(100, { message: 'El límite no puede exceder 100.' })
+  @Max(100)
   limit?: number;
 }

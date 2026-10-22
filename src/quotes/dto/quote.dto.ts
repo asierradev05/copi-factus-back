@@ -89,6 +89,10 @@ export class FilterQuoteDto {
   status?: QuoteStatus;
 
   @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 
