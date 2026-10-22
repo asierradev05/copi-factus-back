@@ -86,7 +86,7 @@ describe('DocumentAttachmentsService', () => {
       entityId: '11111111-2222-3333-4444-555555555555',
       fileName: 'factura.pdf',
       storagePath:
-        'document-attachments/invoice/11111111-2222-3333-4444-555555555555/123-factura.pdf',
+        'attachments/invoice/11111111-2222-3333-4444-555555555555/123-factura.pdf',
     };
 
     it('rechaza storagePath con bucket distinto al de adjuntos', async () => {
@@ -105,6 +105,71 @@ describe('DocumentAttachmentsService', () => {
           {
             ...base,
             storagePath: 'document-attachments/../../etc/passwd.pdf',
+          },
+          'user-1',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prismaCreate).not.toHaveBeenCalled();
+    });
+
+    it('acepta la ruta real que devuelve presignUpload (sin prefijo de bucket)', async () => {
+      const presigned = await service.presignUpload(
+        'factura.pdf',
+        'invoice',
+        base.entityId,
+      );
+
+      const result = await service.create(
+        { ...base, storagePath: presigned.path },
+        'user-1',
+      );
+
+      expect(result).toEqual({ id: 'attachment-1' });
+      expect(prismaCreate).toHaveBeenCalledWith({
+        data: {
+          entityType: AttachmentEntityType.INVOICE,
+          entityId: base.entityId,
+          fileName: 'factura.pdf',
+          filePath: presigned.path,
+          fileSize: undefined,
+          mimeType: undefined,
+          notes: undefined,
+          uploadedById: 'user-1',
+        },
+      });
+    });
+
+    it('normaliza una ruta con prefijo de bucket y guarda solo el object path', async () => {
+      const result = await service.create(
+        {
+          ...base,
+          storagePath: `document-attachments/${base.storagePath}`,
+        },
+        'user-1',
+      );
+
+      expect(result).toEqual({ id: 'attachment-1' });
+      expect(prismaCreate).toHaveBeenCalledWith({
+        data: {
+          entityType: AttachmentEntityType.INVOICE,
+          entityId: base.entityId,
+          fileName: 'factura.pdf',
+          filePath: base.storagePath,
+          fileSize: undefined,
+          mimeType: undefined,
+          notes: undefined,
+          uploadedById: 'user-1',
+        },
+      });
+    });
+
+    it('rechaza una ruta que pertenece a otra entidad', async () => {
+      await expect(
+        service.create(
+          {
+            ...base,
+            storagePath:
+              'attachments/invoice/99999999-9999-9999-9999-999999999999/123-factura.pdf',
           },
           'user-1',
         ),

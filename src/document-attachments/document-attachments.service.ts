@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import {
@@ -52,22 +56,15 @@ export class DocumentAttachmentsService {
   }
 
   async create(dto: CreateAttachmentDto, userId: string) {
-    const [bucket, ...rest] = dto.storagePath.split('/');
-    const objectPath = rest.join('/');
-    if (!bucket || bucket !== this.BUCKET || !objectPath) {
-      throw new BadRequestException('storagePath inválido.');
-    }
-    if (objectPath.includes('..')) {
-      throw new BadRequestException('storagePath inválido.');
-    }
+    const objectPath = this.normalizeStoragePath(dto);
     this.assertFileAllowed(dto.fileName, dto.fileSize, dto.mimeType);
 
     return this.prisma.documentAttachment.create({
       data: {
         entityType: dto.entityType,
-        entityId: dto.entityId,
+        entityId: dto.entityId.trim(),
         fileName: dto.fileName,
-        filePath: dto.storagePath,
+        filePath: objectPath,
         fileSize: dto.fileSize,
         mimeType: dto.mimeType,
         notes: dto.notes,
@@ -105,7 +102,10 @@ export class DocumentAttachmentsService {
 
   async getSignedReadUrl(id: string) {
     const attachment = await this.findOne(id);
-    return this.supabase.signedReadUrl(this.BUCKET, attachment.filePath);
+    return this.supabase.signedReadUrl(
+      this.BUCKET,
+      this.toObjectPath(attachment.filePath),
+    );
   }
 
   async remove(id: string) {
@@ -113,8 +113,36 @@ export class DocumentAttachmentsService {
     await this.supabase
       .getClient()
       .storage.from(this.BUCKET)
-      .remove([attachment.filePath]);
+      .remove([this.toObjectPath(attachment.filePath)]);
     return this.prisma.documentAttachment.delete({ where: { id } });
+  }
+
+  private normalizeStoragePath(dto: CreateAttachmentDto): string {
+    const raw = (dto.storagePath ?? '').trim();
+    const bucketPrefix = `${this.BUCKET}/`;
+    const objectPath = raw.startsWith(bucketPrefix)
+      ? raw.slice(bucketPrefix.length)
+      : raw;
+    const entityId = (dto.entityId ?? '').trim();
+    const expectedPrefix = `attachments/${dto.entityType}/${entityId}/`;
+
+    if (
+      !/^[A-Za-z0-9-]+$/.test(entityId) ||
+      !objectPath.startsWith(expectedPrefix) ||
+      objectPath.includes('..') ||
+      objectPath.endsWith('/')
+    ) {
+      throw new BadRequestException('storagePath inválido.');
+    }
+
+    return objectPath;
+  }
+
+  private toObjectPath(filePath: string): string {
+    const bucketPrefix = `${this.BUCKET}/`;
+    return filePath.startsWith(bucketPrefix)
+      ? filePath.slice(bucketPrefix.length)
+      : filePath;
   }
 
   private sanitizeFileName(fileName: string): string {
@@ -131,9 +159,7 @@ export class DocumentAttachmentsService {
     mimeType?: string | null,
   ): void {
     if (fileSize != null && fileSize > this.MAX_FILE_SIZE) {
-      throw new BadRequestException(
-        'El archivo no puede superar 10MB.',
-      );
+      throw new BadRequestException('El archivo no puede superar 10MB.');
     }
     const ext = (fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
     if (!ext || !this.ALLOWED_EXTENSIONS.includes(ext)) {
