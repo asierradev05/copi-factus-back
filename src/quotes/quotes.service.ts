@@ -42,26 +42,29 @@ export class QuotesService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
+    const search = query.search?.trim();
 
     const where: Prisma.QuoteWhereInput = {};
     if (query.customerId) where.customerId = query.customerId;
     if (query.status) where.status = query.status;
-    if (query.search) {
+    if (search) {
+      const itemQuoteIds = await this.findQuoteIdsByItemDescription(search);
       where.OR = [
-        { quoteNumber: { contains: query.search, mode: 'insensitive' } },
+        { quoteNumber: { contains: search, mode: 'insensitive' } },
         {
           customer: {
-            name: { contains: query.search, mode: 'insensitive' },
+            name: { contains: search, mode: 'insensitive' },
           },
         },
         {
           customer: {
             documentNumber: {
-              contains: query.search,
+              contains: search,
               mode: 'insensitive',
             },
           },
         },
+        ...(itemQuoteIds.length ? [{ id: { in: itemQuoteIds } }] : []),
       ];
     }
     if (query.from || query.to) {
@@ -82,31 +85,33 @@ export class QuotesService {
       this.prisma.quote.count({ where }),
     ]);
 
-    const filteredData = query.search
-      ? data.filter((quote) => {
-          const term = query.search!.toLowerCase();
-          if (quote.quoteNumber?.toLowerCase().includes(term)) return true;
-          if (quote.customer?.name?.toLowerCase().includes(term)) return true;
-          if (quote.customer?.documentNumber?.toLowerCase().includes(term))
-            return true;
-          const items = (quote.items as any[]) ?? [];
-          return items.some((item) =>
-            (item.description ?? '').toLowerCase().includes(term),
-          );
-        })
-      : data;
-
     return {
-      data: filteredData,
-      meta: {
-        total: query.search ? filteredData.length : total,
-        page,
-        limit,
-        totalPages: Math.ceil(
-          (query.search ? filteredData.length : total) / limit,
-        ),
-      },
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  private async findQuoteIdsByItemDescription(term: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        SELECT q.id
+        FROM quotes q
+        WHERE EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(q.items::jsonb) = 'array' THEN q.items::jsonb
+              ELSE '[]'::jsonb
+            END
+          ) AS item
+          WHERE strpos(
+            lower(coalesce(item->>'description', '')),
+            lower(${term})
+          ) > 0
+        )
+      `,
+    );
+    return rows.map((row) => row.id);
   }
 
   async findOne(id: string) {

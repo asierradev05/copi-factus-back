@@ -98,18 +98,19 @@ export class InvoicesService {
       const where: Prisma.InvoiceWhereInput = {};
       if (filters.customerId) where.customerId = filters.customerId;
       if (filters.status) where.status = filters.status as InvoiceStatus;
-      if (filters.search) {
+      const search = filters.search?.trim();
+      if (search) {
         where.OR = [
-          { invoiceNumber: { contains: filters.search, mode: 'insensitive' } },
+          { invoiceNumber: { contains: search, mode: 'insensitive' } },
           {
             customer: {
-              name: { contains: filters.search, mode: 'insensitive' },
+              name: { contains: search, mode: 'insensitive' },
             },
           },
           {
             customer: {
               documentNumber: {
-                contains: filters.search,
+                contains: search,
                 mode: 'insensitive',
               },
             },
@@ -117,10 +118,19 @@ export class InvoicesService {
           {
             items: {
               some: {
-                description: {
-                  contains: filters.search,
-                  mode: 'insensitive',
-                },
+                OR: [
+                  {
+                    description: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    product: {
+                      name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                ],
               },
             },
           },
@@ -163,21 +173,29 @@ export class InvoicesService {
         filtered = filtered.filter((i) => i.status === filters.status);
       }
       if (filters.search) {
-        const term = filters.search.toLowerCase();
-        filtered = filtered.filter((i) => {
-          const customer = globalStore.customers.find(
-            (c) => c.id === i.customerId,
-          );
-          const itemMatch = (i.items ?? []).some((item: any) =>
-            (item.description ?? '').toLowerCase().includes(term),
-          );
-          return (
-            (i.invoiceNumber ?? '').toLowerCase().includes(term) ||
-            (customer?.name ?? '').toLowerCase().includes(term) ||
-            (customer?.documentNumber ?? '').toLowerCase().includes(term) ||
-            itemMatch
-          );
-        });
+        const term = filters.search.trim().toLowerCase();
+        if (term) {
+          filtered = filtered.filter((i) => {
+            const customer = globalStore.customers.find(
+              (c) => c.id === i.customerId,
+            );
+            const itemMatch = (i.items ?? []).some((item: any) => {
+              const product = globalStore.products.find(
+                (p) => p.id === item.productId,
+              );
+              return (
+                (item.description ?? '').toLowerCase().includes(term) ||
+                (product?.name ?? '').toLowerCase().includes(term)
+              );
+            });
+            return (
+              (i.invoiceNumber ?? '').toLowerCase().includes(term) ||
+              (customer?.name ?? '').toLowerCase().includes(term) ||
+              (customer?.documentNumber ?? '').toLowerCase().includes(term) ||
+              itemMatch
+            );
+          });
+        }
       }
       if (filters.from || filters.to) {
         filtered = filtered.filter((i) => {

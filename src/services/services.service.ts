@@ -99,18 +99,19 @@ export class ServicesService {
       const where: Prisma.ServiceWhereInput = {};
       if (filters.customerId) where.customerId = filters.customerId;
       if (filters.status) where.status = filters.status;
-      if (filters.search) {
+      const search = filters.search?.trim();
+      if (search) {
         where.OR = [
-          { description: { contains: filters.search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
           {
             customer: {
-              name: { contains: filters.search, mode: 'insensitive' },
+              name: { contains: search, mode: 'insensitive' },
             },
           },
           {
             customer: {
               documentNumber: {
-                contains: filters.search,
+                contains: search,
                 mode: 'insensitive',
               },
             },
